@@ -69,6 +69,47 @@ bool ComputeGeometryStepAndPropagate(Track &track)
   return nextState.Top() != nullptr; /* returns if particle is still inside world */
 }
 
+__device__ bool GammaConversion(Track &track, Secondaries &secondaries,
+                                GlobalScoring *globalScoring, ScoringPerVolume *)
+{
+  // Return if energy is below threshold
+  if (track.energy < 2 * copcore::units::kElectronMassC2)
+    return false;
+
+  double logEnergy = std::log(track.energy);
+  double elKinEnergy, posKinEnergy;
+
+  RanluxppDoubleEngine rnge(&track.rngState);
+  G4HepEmTrack* theTrack = track.gammaTrack.GetTrack();
+
+  G4HepEmGammaInteractionConversion::SampleKinEnergies(&g4HepEmData, track.energy, logEnergy, theTrack->GetMCIndex(), elKinEnergy,
+      posKinEnergy, &rnge);
+
+  double dirPrimary[] = {track.dir.x(), track.dir.y(), track.dir.z()};
+  double dirSecondaryEl[3], dirSecondaryPos[3];
+  G4HepEmGammaInteractionConversion::SampleDirections(dirPrimary, dirSecondaryEl, dirSecondaryPos, elKinEnergy,
+      posKinEnergy, &rnge);
+
+  Track &electron = secondaries.electrons.NextTrack();
+  Track &positron = secondaries.positrons.NextTrack();
+
+  electron.InitAsSecondary(/*parent=*/track);
+  electron.rngState = track.rngState.Branch();
+  electron.energy   = elKinEnergy;
+  electron.dir.Set(dirSecondaryEl[0], dirSecondaryEl[1], dirSecondaryEl[2]);
+
+  positron.InitAsSecondary(/*parent=*/track);
+  // Reuse the RNG state of the dying track.
+  positron.rngState = track.rngState;
+  positron.energy   = posKinEnergy;
+  positron.dir.Set(dirSecondaryPos[0], dirSecondaryPos[1], dirSecondaryPos[2]);
+
+  atomicAdd(&globalScoring->numElectrons, 1);
+  atomicAdd(&globalScoring->numPositrons, 1);
+
+  return true;
+}
+
 __global__ void TransportGammas(Track *gammas, const adept::MParray *active, Secondaries secondaries,
                                 adept::MParray *activeQueue, GlobalScoring *globalScoring,
                                 ScoringPerVolume *scoringPerVolume)
@@ -118,39 +159,8 @@ __global__ void TransportGammas(Track *gammas, const adept::MParray *active, Sec
 
     switch (winnerProcessIndex) {
     case 0: {
-      // Invoke gamma conversion to e-/e+ pairs, if the energy is above the threshold.
-      if (energy < 2 * copcore::units::kElectronMassC2) {
+      if (!GammaConversion(currentTrack, secondaries, globalScoring, scoringPerVolume))
         activeQueue->push_back(slot);
-        continue;
-      }
-
-      double logEnergy = std::log(energy);
-      double elKinEnergy, posKinEnergy;
-      G4HepEmGammaInteractionConversion::SampleKinEnergies(&g4HepEmData, energy, logEnergy, theTrack->GetMCIndex(), elKinEnergy,
-                                                           posKinEnergy, &rnge);
-
-      double dirPrimary[] = {currentTrack.dir.x(), currentTrack.dir.y(), currentTrack.dir.z()};
-      double dirSecondaryEl[3], dirSecondaryPos[3];
-      G4HepEmGammaInteractionConversion::SampleDirections(dirPrimary, dirSecondaryEl, dirSecondaryPos, elKinEnergy,
-                                                          posKinEnergy, &rnge);
-
-      Track &electron = secondaries.electrons.NextTrack();
-      Track &positron = secondaries.positrons.NextTrack();
-      atomicAdd(&globalScoring->numElectrons, 1);
-      atomicAdd(&globalScoring->numPositrons, 1);
-
-      electron.InitAsSecondary(/*parent=*/currentTrack);
-      electron.rngState = newRNG;
-      electron.energy   = elKinEnergy;
-      electron.dir.Set(dirSecondaryEl[0], dirSecondaryEl[1], dirSecondaryEl[2]);
-
-      positron.InitAsSecondary(/*parent=*/currentTrack);
-      // Reuse the RNG state of the dying track.
-      positron.rngState = currentTrack.rngState;
-      positron.energy   = posKinEnergy;
-      positron.dir.Set(dirSecondaryPos[0], dirSecondaryPos[1], dirSecondaryPos[2]);
-
-      // The current track is killed by not enqueuing into the next activeQueue.
       break;
     }
     case 1: {
