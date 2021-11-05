@@ -36,15 +36,43 @@ void ComputePhysicsStepLimit(Track &track)
   G4HepEmGammaManager::HowFar(&g4HepEmData, &g4HepEmPars, &track.gammaTrack);
 }
 
-__global__ void TransportGammas(Track *gammas, const adept::MParray *active, Secondaries secondaries,
-                                adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                                ScoringPerVolume *scoringPerVolume)
+__device__
+bool ComputeGeometryStepAndPropagate(Track &track)
 {
 #ifdef VECGEOM_FLOAT_PRECISION
   const Precision kPush = 10 * vecgeom::kTolerance;
 #else
   const Precision kPush = 0.;
 #endif
+  vecgeom::NavStateIndex nextState;
+  G4HepEmTrack* theTrack = track.gammaTrack.GetTrack();
+
+  double StepLength = BVHNavigator::ComputeStepAndNextVolume(track.pos, track.dir,
+    theTrack->GetGStepLength(), track.navState, nextState, kPush);
+
+  track.pos += StepLength * track.dir;
+
+  // Propagate information from geometrical step to G4HepEm.
+  theTrack->SetGStepLength(StepLength);
+  theTrack->SetOnBoundary(nextState.IsOnBoundary());
+  G4HepEmGammaManager::UpdateNumIALeft(theTrack);
+
+  // Relocate track if necessary, else set boundary state to propagate
+  // information correctly to secondaries and the next step
+  track.navState.SetBoundaryState(nextState.IsOnBoundary());
+
+  if (nextState.IsOnBoundary() && nextState.Top()) {
+    BVHNavigator::RelocateToNextVolume(track.pos, track.dir, nextState);
+    track.navState = nextState;
+  }
+
+  return nextState.Top() != nullptr; /* returns if particle is still inside world */
+}
+
+__global__ void TransportGammas(Track *gammas, const adept::MParray *active, Secondaries secondaries,
+                                adept::MParray *activeQueue, GlobalScoring *globalScoring,
+                                ScoringPerVolume *scoringPerVolume)
+{
   int activeSize = active->size();
   for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < activeSize; i += blockDim.x * gridDim.x) {
     const int slot      = (*active)[i];
@@ -55,44 +83,24 @@ __global__ void TransportGammas(Track *gammas, const adept::MParray *active, Sec
 
     // Get result into variables.
     G4HepEmTrack* theTrack = currentTrack.gammaTrack.GetTrack();
-    double geometricalStepLengthFromPhysics = theTrack->GetGStepLength();
-    int winnerProcessIndex                  = theTrack->GetWinnerProcessIndex();
-    // Leave the range and MFP inside the G4HepEmTrack. If we split kernels, we
-    // also need to carry them over!
+    int winnerProcessIndex = theTrack->GetWinnerProcessIndex();
 
-    // Check if there's a volume boundary in between.
-    vecgeom::NavStateIndex nextState;
-    double geometryStepLength = BVHNavigator::ComputeStepAndNextVolume(
-        currentTrack.pos, currentTrack.dir, geometricalStepLengthFromPhysics, currentTrack.navState, nextState, kPush);
-    currentTrack.pos += geometryStepLength * currentTrack.dir;
+    bool inWorld = ComputeGeometryStepAndPropagate(currentTrack);
     atomicAdd(&globalScoring->neutralSteps, 1);
 
-    // Set boundary state in navState so the next step and secondaries get the
-    // correct information (currentTrack.navState = nextState only if relocated
-    // in case of a boundary; see below)
-    currentTrack.navState.SetBoundaryState(nextState.IsOnBoundary());
-
-    // Propagate information from geometrical step to G4HepEm.
-    theTrack->SetGStepLength(geometryStepLength);
-    theTrack->SetOnBoundary(nextState.IsOnBoundary());
-
-    G4HepEmGammaManager::UpdateNumIALeft(theTrack);
-
-    if (nextState.IsOnBoundary()) {
+    if (theTrack->GetOnBoundary()) {
       // For now, just count that we hit something.
       atomicAdd(&globalScoring->hits, 1);
 
       // Kill the particle if it left the world.
-      if (nextState.Top() != nullptr) {
+      if (inWorld)
         activeQueue->push_back(slot);
-        BVHNavigator::RelocateToNextVolume(currentTrack.pos, currentTrack.dir, nextState);
 
-        // Move to the next boundary.
-        currentTrack.navState = nextState;
-      }
       continue;
-    } else if (winnerProcessIndex < 0) {
-      // No discrete process, move on.
+    }
+
+    // No discrete process, move on.
+    if (winnerProcessIndex < 0) {
       activeQueue->push_back(slot);
       continue;
     }
