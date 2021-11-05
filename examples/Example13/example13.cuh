@@ -11,6 +11,7 @@
 #include <CopCore/Ranluxpp.h>
 
 #include <G4HepEmData.hh>
+#include <G4HepEmGammaTrack.hh>
 #include <G4HepEmParameters.hh>
 #include <G4HepEmRandomEngine.hh>
 
@@ -25,6 +26,7 @@ struct Track {
   double energy;
   double numIALeft[3];
   double initialRange;
+  G4HepEmGammaTrack gammaTrack;
 
   vecgeom::Vector3D<Precision> pos;
   vecgeom::Vector3D<Precision> dir;

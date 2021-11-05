@@ -38,9 +38,8 @@ __global__ void TransportGammas(Track *gammas, const adept::MParray *active, Sec
     int lvolID     = volume->GetLogicalVolume()->id();
     int theMCIndex = MCIndex[lvolID];
 
-    // Init a track with the needed data to call into G4HepEm.
-    G4HepEmGammaTrack gammaTrack;
-    G4HepEmTrack *theTrack = gammaTrack.GetTrack();
+    // Init gamma track with the needed data to call into G4HepEm.
+    G4HepEmTrack *theTrack = currentTrack.gammaTrack.GetTrack();
     theTrack->SetEKin(currentTrack.energy);
     theTrack->SetMCIndex(theMCIndex);
 
@@ -55,7 +54,7 @@ __global__ void TransportGammas(Track *gammas, const adept::MParray *active, Sec
     }
 
     // Call G4HepEm to compute the physics step limit.
-    G4HepEmGammaManager::HowFar(&g4HepEmData, &g4HepEmPars, &gammaTrack);
+    G4HepEmGammaManager::HowFar(&g4HepEmData, &g4HepEmPars, &currentTrack.gammaTrack);
 
     // Get result into variables.
     double geometricalStepLengthFromPhysics = theTrack->GetGStepLength();
@@ -202,7 +201,7 @@ __global__ void TransportGammas(Track *gammas, const adept::MParray *active, Sec
       const double theLowEnergyThreshold = 1 * copcore::units::eV;
 
       const double bindingEnergy = G4HepEmGammaInteractionPhotoelectric::SelectElementBindingEnergy(
-          &g4HepEmData, theMCIndex, gammaTrack.GetPEmxSec(), energy, &rnge);
+          &g4HepEmData, theMCIndex, currentTrack.gammaTrack.GetPEmxSec(), energy, &rnge);
 
       double edep             = bindingEnergy;
       const double photoElecE = energy - edep;
