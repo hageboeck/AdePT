@@ -19,6 +19,23 @@
 #include <G4HepEmGammaInteractionConversion.icc>
 #include <G4HepEmGammaInteractionPhotoelectric.icc>
 
+__device__
+void ComputePhysicsStepLimit(Track &track)
+{
+  int id = track.navState.Top()->GetLogicalVolume()->id();
+
+  G4HepEmTrack* t = track.gammaTrack.GetTrack();
+
+  t->SetEKin(track.energy);
+  t->SetMCIndex(MCIndex[id]);
+
+  for (int ip = 0; ip < 3; ++ip)
+    if (t->GetNumIALeft(ip) <= 0)
+      t->SetNumIALeft(-std::log(track.Uniform()), ip);
+
+  G4HepEmGammaManager::HowFar(&g4HepEmData, &g4HepEmPars, &track.gammaTrack);
+}
+
 __global__ void TransportGammas(Track *gammas, const adept::MParray *active, Secondaries secondaries,
                                 adept::MParray *activeQueue, GlobalScoring *globalScoring,
                                 ScoringPerVolume *scoringPerVolume)
@@ -32,30 +49,12 @@ __global__ void TransportGammas(Track *gammas, const adept::MParray *active, Sec
   for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < activeSize; i += blockDim.x * gridDim.x) {
     const int slot      = (*active)[i];
     Track &currentTrack = gammas[slot];
-    auto volume         = currentTrack.navState.Top();
-    int volumeID        = volume->id();
-    // the MCC vector is indexed by the logical volume id
-    int lvolID     = volume->GetLogicalVolume()->id();
+    int volumeID = currentTrack.navState.Top()->id();
 
-    // Init gamma track with the needed data to call into G4HepEm.
-    G4HepEmTrack *theTrack = currentTrack.gammaTrack.GetTrack();
-    theTrack->SetEKin(currentTrack.energy);
-    theTrack->SetMCIndex(MCIndex[lvolID]);
-
-    // Sample the `number-of-interaction-left` and put it into the track.
-    for (int ip = 0; ip < 3; ++ip) {
-      double numIALeft = currentTrack.numIALeft[ip];
-      if (numIALeft <= 0) {
-        numIALeft                  = -std::log(currentTrack.Uniform());
-        currentTrack.numIALeft[ip] = numIALeft;
-      }
-      theTrack->SetNumIALeft(numIALeft, ip);
-    }
-
-    // Call G4HepEm to compute the physics step limit.
-    G4HepEmGammaManager::HowFar(&g4HepEmData, &g4HepEmPars, &currentTrack.gammaTrack);
+    ComputePhysicsStepLimit(currentTrack);
 
     // Get result into variables.
+    G4HepEmTrack* theTrack = currentTrack.gammaTrack.GetTrack();
     double geometricalStepLengthFromPhysics = theTrack->GetGStepLength();
     int winnerProcessIndex                  = theTrack->GetWinnerProcessIndex();
     // Leave the range and MFP inside the G4HepEmTrack. If we split kernels, we
@@ -79,12 +78,6 @@ __global__ void TransportGammas(Track *gammas, const adept::MParray *active, Sec
 
     G4HepEmGammaManager::UpdateNumIALeft(theTrack);
 
-    // Save the `number-of-interaction-left` in our track.
-    for (int ip = 0; ip < 3; ++ip) {
-      double numIALeft           = theTrack->GetNumIALeft(ip);
-      currentTrack.numIALeft[ip] = numIALeft;
-    }
-
     if (nextState.IsOnBoundary()) {
       // For now, just count that we hit something.
       atomicAdd(&globalScoring->hits, 1);
@@ -106,7 +99,7 @@ __global__ void TransportGammas(Track *gammas, const adept::MParray *active, Sec
 
     // Reset number of interaction left for the winner discrete process.
     // (Will be resampled in the next iteration.)
-    currentTrack.numIALeft[winnerProcessIndex] = -1.0;
+    theTrack->SetNumIALeft(-1, theTrack->GetWinnerProcessIndex());
 
     // Perform the discrete interaction.
     RanluxppDoubleEngine rnge(&currentTrack.rngState);
