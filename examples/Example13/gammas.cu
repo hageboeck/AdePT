@@ -36,12 +36,11 @@ __global__ void TransportGammas(Track *gammas, const adept::MParray *active, Sec
     int volumeID        = volume->id();
     // the MCC vector is indexed by the logical volume id
     int lvolID     = volume->GetLogicalVolume()->id();
-    int theMCIndex = MCIndex[lvolID];
 
     // Init gamma track with the needed data to call into G4HepEm.
     G4HepEmTrack *theTrack = currentTrack.gammaTrack.GetTrack();
     theTrack->SetEKin(currentTrack.energy);
-    theTrack->SetMCIndex(theMCIndex);
+    theTrack->SetMCIndex(MCIndex[lvolID]);
 
     // Sample the `number-of-interaction-left` and put it into the track.
     for (int ip = 0; ip < 3; ++ip) {
@@ -126,7 +125,7 @@ __global__ void TransportGammas(Track *gammas, const adept::MParray *active, Sec
 
       double logEnergy = std::log(energy);
       double elKinEnergy, posKinEnergy;
-      G4HepEmGammaInteractionConversion::SampleKinEnergies(&g4HepEmData, energy, logEnergy, theMCIndex, elKinEnergy,
+      G4HepEmGammaInteractionConversion::SampleKinEnergies(&g4HepEmData, energy, logEnergy, theTrack->GetMCIndex(), elKinEnergy,
                                                            posKinEnergy, &rnge);
 
       double dirPrimary[] = {currentTrack.dir.x(), currentTrack.dir.y(), currentTrack.dir.z()};
@@ -201,7 +200,7 @@ __global__ void TransportGammas(Track *gammas, const adept::MParray *active, Sec
       const double theLowEnergyThreshold = 1 * copcore::units::eV;
 
       const double bindingEnergy = G4HepEmGammaInteractionPhotoelectric::SelectElementBindingEnergy(
-          &g4HepEmData, theMCIndex, currentTrack.gammaTrack.GetPEmxSec(), energy, &rnge);
+          &g4HepEmData, theTrack->GetMCIndex(), currentTrack.gammaTrack.GetPEmxSec(), energy, &rnge);
 
       double edep             = bindingEnergy;
       const double photoElecE = energy - edep;
