@@ -110,6 +110,54 @@ __device__ bool GammaConversion(Track &track, Secondaries &secondaries,
   return true;
 }
 
+__device__ bool ComptonScattering(Track &track, Secondaries &secondaries,
+                                  GlobalScoring *globalScoring, ScoringPerVolume *scoringPerVolume)
+{
+  constexpr double LowEnergyThreshold = 100 * copcore::units::eV;
+
+  if (track.energy < LowEnergyThreshold)
+    return false;
+
+  RanluxppDoubleEngine rnge(&track.rngState);
+  int volumeID = track.navState.Top()->id();
+
+  const double origDirPrimary[] = {track.dir.x(), track.dir.y(), track.dir.z()};
+  double dirPrimary[3];
+  const double newEnergyGamma =
+    G4HepEmGammaInteractionCompton::SamplePhotonEnergyAndDirection(track.energy, dirPrimary, origDirPrimary, &rnge);
+  vecgeom::Vector3D<double> newDirGamma(dirPrimary[0], dirPrimary[1], dirPrimary[2]);
+
+  const double energyEl = track.energy - newEnergyGamma;
+
+  if (energyEl > LowEnergyThreshold) {
+    // Create a secondary electron and sample/compute directions.
+    Track &electron = secondaries.electrons.NextTrack();
+    atomicAdd(&globalScoring->numElectrons, 1);
+
+    electron.InitAsSecondary(/*parent=*/track);
+    electron.rngState = track.rngState.Branch();
+    electron.energy   = energyEl;
+    electron.dir      = track.energy * track.dir - newEnergyGamma * newDirGamma;
+    electron.dir.Normalize();
+  } else {
+    atomicAdd(&globalScoring->energyDeposit, energyEl);
+    atomicAdd(&scoringPerVolume->energyDeposit[volumeID], energyEl);
+  }
+
+  // Check the new gamma energy and deposit if below threshold.
+  if (newEnergyGamma > LowEnergyThreshold) {
+    track.energy = newEnergyGamma;
+    track.dir    = newDirGamma;
+
+    // The current track continues to live.
+    return false;
+  } else {
+    atomicAdd(&globalScoring->energyDeposit, newEnergyGamma);
+    atomicAdd(&scoringPerVolume->energyDeposit[volumeID], newEnergyGamma);
+    return true;
+  }
+}
+
 __global__ void TransportGammas(Track *gammas, const adept::MParray *active, Secondaries secondaries,
                                 adept::MParray *activeQueue, GlobalScoring *globalScoring,
                                 ScoringPerVolume *scoringPerVolume)
@@ -164,46 +212,8 @@ __global__ void TransportGammas(Track *gammas, const adept::MParray *active, Sec
       break;
     }
     case 1: {
-      // Invoke Compton scattering of gamma.
-      constexpr double LowEnergyThreshold = 100 * copcore::units::eV;
-      if (energy < LowEnergyThreshold) {
+      if (!ComptonScattering(currentTrack, secondaries, globalScoring, scoringPerVolume))
         activeQueue->push_back(slot);
-        continue;
-      }
-      const double origDirPrimary[] = {currentTrack.dir.x(), currentTrack.dir.y(), currentTrack.dir.z()};
-      double dirPrimary[3];
-      const double newEnergyGamma =
-          G4HepEmGammaInteractionCompton::SamplePhotonEnergyAndDirection(energy, dirPrimary, origDirPrimary, &rnge);
-      vecgeom::Vector3D<double> newDirGamma(dirPrimary[0], dirPrimary[1], dirPrimary[2]);
-
-      const double energyEl = energy - newEnergyGamma;
-      if (energyEl > LowEnergyThreshold) {
-        // Create a secondary electron and sample/compute directions.
-        Track &electron = secondaries.electrons.NextTrack();
-        atomicAdd(&globalScoring->numElectrons, 1);
-
-        electron.InitAsSecondary(/*parent=*/currentTrack);
-        electron.rngState = newRNG;
-        electron.energy   = energyEl;
-        electron.dir      = energy * currentTrack.dir - newEnergyGamma * newDirGamma;
-        electron.dir.Normalize();
-      } else {
-        atomicAdd(&globalScoring->energyDeposit, energyEl);
-        atomicAdd(&scoringPerVolume->energyDeposit[volumeID], energyEl);
-      }
-
-      // Check the new gamma energy and deposit if below threshold.
-      if (newEnergyGamma > LowEnergyThreshold) {
-        currentTrack.energy = newEnergyGamma;
-        currentTrack.dir    = newDirGamma;
-
-        // The current track continues to live.
-        activeQueue->push_back(slot);
-      } else {
-        atomicAdd(&globalScoring->energyDeposit, newEnergyGamma);
-        atomicAdd(&scoringPerVolume->energyDeposit[volumeID], newEnergyGamma);
-        // The current track is killed by not enqueuing into the next activeQueue.
-      }
       break;
     }
     case 2: {
