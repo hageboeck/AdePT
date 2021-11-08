@@ -158,6 +158,38 @@ __device__ bool ComptonScattering(Track &track, Secondaries &secondaries,
   }
 }
 
+__device__ bool PhotoElectricEffect(Track &track, Secondaries &secondaries,
+                                    GlobalScoring *globalScoring, ScoringPerVolume *scoringPerVolume)
+{
+  // Invoke photoelectric process.
+  RanluxppDoubleEngine rnge(&track.rngState);
+  const double theLowEnergyThreshold = 1 * copcore::units::eV;
+
+  const double bindingEnergy = G4HepEmGammaInteractionPhotoelectric::SelectElementBindingEnergy(
+      &g4HepEmData, track.gammaTrack.GetTrack()->GetMCIndex(), track.gammaTrack.GetPEmxSec(), track.energy, &rnge);
+
+  double edep             = bindingEnergy;
+  const double photoElecE = track.energy - edep;
+  if (photoElecE > theLowEnergyThreshold) {
+    // Create a secondary electron and sample directions.
+    Track &electron = secondaries.electrons.NextTrack();
+    atomicAdd(&globalScoring->numElectrons, 1);
+
+    double dirGamma[] = {track.dir.x(), track.dir.y(), track.dir.z()};
+    double dirPhotoElec[3];
+    G4HepEmGammaInteractionPhotoelectric::SamplePhotoElectronDirection(photoElecE, dirGamma, dirPhotoElec, &rnge);
+
+    electron.InitAsSecondary(/*parent=*/track);
+    electron.rngState = track.rngState.Branch();
+    electron.energy   = photoElecE;
+    electron.dir.Set(dirPhotoElec[0], dirPhotoElec[1], dirPhotoElec[2]);
+  } else {
+    edep = track.energy;
+  }
+  atomicAdd(&globalScoring->energyDeposit, edep);
+  return true;
+}
+
 __global__ void TransportGammas(Track *gammas, const adept::MParray *active, Secondaries secondaries,
                                 adept::MParray *activeQueue, GlobalScoring *globalScoring,
                                 ScoringPerVolume *scoringPerVolume)
@@ -217,32 +249,7 @@ __global__ void TransportGammas(Track *gammas, const adept::MParray *active, Sec
       break;
     }
     case 2: {
-      // Invoke photoelectric process.
-      const double theLowEnergyThreshold = 1 * copcore::units::eV;
-
-      const double bindingEnergy = G4HepEmGammaInteractionPhotoelectric::SelectElementBindingEnergy(
-          &g4HepEmData, theTrack->GetMCIndex(), currentTrack.gammaTrack.GetPEmxSec(), energy, &rnge);
-
-      double edep             = bindingEnergy;
-      const double photoElecE = energy - edep;
-      if (photoElecE > theLowEnergyThreshold) {
-        // Create a secondary electron and sample directions.
-        Track &electron = secondaries.electrons.NextTrack();
-        atomicAdd(&globalScoring->numElectrons, 1);
-
-        double dirGamma[] = {currentTrack.dir.x(), currentTrack.dir.y(), currentTrack.dir.z()};
-        double dirPhotoElec[3];
-        G4HepEmGammaInteractionPhotoelectric::SamplePhotoElectronDirection(photoElecE, dirGamma, dirPhotoElec, &rnge);
-
-        electron.InitAsSecondary(/*parent=*/currentTrack);
-        electron.rngState = newRNG;
-        electron.energy   = photoElecE;
-        electron.dir.Set(dirPhotoElec[0], dirPhotoElec[1], dirPhotoElec[2]);
-      } else {
-        edep = energy;
-      }
-      atomicAdd(&globalScoring->energyDeposit, edep);
-      // The current track is killed by not enqueuing into the next activeQueue.
+      PhotoElectricEffect(currentTrack, secondaries, globalScoring, scoringPerVolume);
       break;
     }
     }
