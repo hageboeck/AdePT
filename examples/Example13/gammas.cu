@@ -198,11 +198,9 @@ __global__ void TransportGammas(Track *gammas, const adept::MParray *active, Sec
   for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < activeSize; i += blockDim.x * gridDim.x) {
     const int slot      = (*active)[i];
     Track &currentTrack = gammas[slot];
-    int volumeID = currentTrack.navState.Top()->id();
 
     ComputePhysicsStepLimit(currentTrack);
 
-    // Get result into variables.
     G4HepEmTrack* theTrack = currentTrack.gammaTrack.GetTrack();
     int winnerProcessIndex = theTrack->GetWinnerProcessIndex();
 
@@ -231,12 +229,6 @@ __global__ void TransportGammas(Track *gammas, const adept::MParray *active, Sec
     theTrack->SetNumIALeft(-1, theTrack->GetWinnerProcessIndex());
 
     // Perform the discrete interaction.
-    RanluxppDoubleEngine rnge(&currentTrack.rngState);
-    // We might need one branched RNG state, prepare while threads are synchronized.
-    RanluxppDouble newRNG(currentTrack.rngState.Branch());
-
-    const double energy = currentTrack.energy;
-
     switch (winnerProcessIndex) {
     case 0: {
       if (!GammaConversion(currentTrack, secondaries, globalScoring, scoringPerVolume))
