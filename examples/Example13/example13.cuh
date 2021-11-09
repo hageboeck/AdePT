@@ -31,6 +31,7 @@ struct Track {
   vecgeom::Vector3D<Precision> pos;
   vecgeom::Vector3D<Precision> dir;
   vecgeom::NavStateIndex navState;
+  bool done;
 
   __host__ __device__ double Uniform() { return rngState.Rndm(); }
 
@@ -140,6 +141,13 @@ __global__ void TransportPositrons(Track *positrons, const adept::MParray *activ
 __global__ void TransportGammas(Track *gammas, const adept::MParray *active, Secondaries secondaries,
                                 adept::MParray *activeQueue, GlobalScoring *globalScoring,
                                 ScoringPerVolume *scoringPerVolume);
+
+__global__ void ComputePhysicsStepLimit(Track *gammas, const adept::MParray *active);
+__global__ void ComputeGeometryStepAndPropagate(Track *gammas, const adept::MParray *active,
+                                                adept::MParray *activeQueue, GlobalScoring *globalScoring);
+__global__ void ComputeInteraction(Track *gammas, const adept::MParray *active, Secondaries secondaries,
+                                   adept::MParray *activeQueue, GlobalScoring *globalScoring,
+                                   ScoringPerVolume *scoringPerVolume);
 
 // Constant data structures from G4HepEm accessed by the kernels.
 // (defined in TestEm3.cu)

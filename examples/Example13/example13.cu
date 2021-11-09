@@ -323,9 +323,19 @@ void example13(int numParticles, double energy, int batch, const int *MCIndex_ho
         transportBlocks = (numGammas + TransportThreads - 1) / TransportThreads;
         transportBlocks = std::min(transportBlocks, MaxBlocks);
 
+#if 0
         TransportGammas<<<transportBlocks, TransportThreads, 0, gammas.stream>>>(
             gammas.tracks, gammas.queues.currentlyActive, secondaries, gammas.queues.nextActive, globalScoring,
             scoringPerVolume);
+#else
+        ComputePhysicsStepLimit<<<transportBlocks, TransportThreads, 0, gammas.stream>>>(
+            gammas.tracks, gammas.queues.currentlyActive);
+        ComputeGeometryStepAndPropagate<<<transportBlocks, TransportThreads, 0, gammas.stream>>>(
+            gammas.tracks, gammas.queues.currentlyActive, gammas.queues.nextActive, globalScoring);
+        ComputeInteraction<<<transportBlocks, TransportThreads, 0, gammas.stream>>>(
+            gammas.tracks, gammas.queues.currentlyActive, secondaries, gammas.queues.nextActive, globalScoring,
+            scoringPerVolume);
+#endif
 
         COPCORE_CUDA_CHECK(cudaEventRecord(gammas.event, gammas.stream));
         COPCORE_CUDA_CHECK(cudaStreamWaitEvent(stream, gammas.event, 0));

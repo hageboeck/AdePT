@@ -36,6 +36,13 @@ void ComputePhysicsStepLimit(Track &track)
   G4HepEmGammaManager::HowFar(&g4HepEmData, &g4HepEmPars, &track.gammaTrack);
 }
 
+__global__ void ComputePhysicsStepLimit(Track *gammas, const adept::MParray *active)
+{
+  int activeSize = active->size();
+  for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < activeSize; i += blockDim.x * gridDim.x)
+    ComputePhysicsStepLimit(gammas[(*active)[i]]);
+}
+
 __device__
 bool ComputeGeometryStepAndPropagate(Track &track)
 {
@@ -67,6 +74,32 @@ bool ComputeGeometryStepAndPropagate(Track &track)
   }
 
   return nextState.Top() != nullptr; /* returns if particle is still inside world */
+}
+
+__global__ void ComputeGeometryStepAndPropagate(Track *gammas, const adept::MParray *active,
+                                                adept::MParray *activeQueue, GlobalScoring *globalScoring)
+{
+  int activeSize = active->size();
+  for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < activeSize; i += blockDim.x * gridDim.x) {
+    int slot      = (*active)[i];
+    Track &currentTrack = gammas[slot];
+
+    bool inWorld = ComputeGeometryStepAndPropagate(currentTrack);
+    bool onBoundary = currentTrack.navState.IsOnBoundary();
+
+    currentTrack.done = onBoundary && inWorld;
+
+    if (onBoundary) {
+      // For now, just count that we hit something.
+      atomicAdd(&globalScoring->hits, 1);
+
+      // Kill the particle if it left the world.
+      if (inWorld)
+        activeQueue->push_back(slot);
+    }
+
+    atomicAdd(&globalScoring->neutralSteps, 1);
+  }
 }
 
 __device__ bool GammaConversion(Track &track, Secondaries &secondaries,
@@ -188,6 +221,51 @@ __device__ bool PhotoElectricEffect(Track &track, Secondaries &secondaries,
   }
   atomicAdd(&globalScoring->energyDeposit, edep);
   return true;
+}
+
+__global__ void ComputeInteraction(Track *gammas, const adept::MParray *active, Secondaries secondaries,
+                                adept::MParray *activeQueue, GlobalScoring *globalScoring,
+                                ScoringPerVolume *scoringPerVolume)
+{
+  int activeSize = active->size();
+  for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < activeSize; i += blockDim.x * gridDim.x) {
+    const int slot = (*active)[i];
+    Track &currentTrack = gammas[slot];
+
+    // Skip tracks that have hit a boundary
+    if (currentTrack.done)
+      continue;
+
+    G4HepEmTrack* theTrack = currentTrack.gammaTrack.GetTrack();
+    int winnerProcessIndex = theTrack->GetWinnerProcessIndex();
+
+    // Skip tracks that have no active discrete process
+    if (winnerProcessIndex < 0) {
+      activeQueue->push_back(slot);
+      continue;
+    }
+
+    // Reset number of interaction left. It will be resampled in the next iteration.
+    theTrack->SetNumIALeft(-1, theTrack->GetWinnerProcessIndex());
+
+    // Perform the discrete interaction.
+    switch (winnerProcessIndex) {
+    case 0: {
+      if (!GammaConversion(currentTrack, secondaries, globalScoring, scoringPerVolume))
+        activeQueue->push_back(slot);
+      break;
+    }
+    case 1: {
+      if (!ComptonScattering(currentTrack, secondaries, globalScoring, scoringPerVolume))
+        activeQueue->push_back(slot);
+      break;
+    }
+    case 2: {
+      PhotoElectricEffect(currentTrack, secondaries, globalScoring, scoringPerVolume);
+      break;
+    }
+    }
+  }
 }
 
 __global__ void TransportGammas(Track *gammas, const adept::MParray *active, Secondaries secondaries,
