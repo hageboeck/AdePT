@@ -190,6 +190,7 @@ int main(int argc, char *argv[])
   OPTION_DOUBLE(energy, 10); // entered in GeV
   energy *= copcore::units::GeV;
   OPTION_INT(batch, -1);
+  OPTION_BOOL(rotatingParticleGun, false);
 
   vecgeom::Stopwatch timer;
   timer.Start();
@@ -251,7 +252,8 @@ int main(int argc, char *argv[])
 
   tracer.setTag("callExample13");
 
-  example13(particles, energy, batch, MCCindex, &scoringPerVolume, &globalScoring, NumVolumes, NumPlaced, &hepEmState);
+  example13(particles, energy, batch, MCCindex, &scoringPerVolume, &globalScoring, NumVolumes, NumPlaced, &hepEmState,
+            rotatingParticleGun);
 
   std::cout << std::endl;
   std::cout << std::endl;

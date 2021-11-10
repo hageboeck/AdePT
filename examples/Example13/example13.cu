@@ -108,7 +108,7 @@ __global__ void InitParticleQueues(ParticleQueues queues, size_t Capacity)
 
 // Kernel function to initialize a set of primary particles.
 __global__ void InitPrimaries(ParticleGenerator generator, int startEvent, int numEvents, double energy,
-                              const vecgeom::VPlacedVolume *world, GlobalScoring *globalScoring)
+                              const vecgeom::VPlacedVolume *world, GlobalScoring *globalScoring, bool rotatingParticleGun)
 {
   for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < numEvents; i += blockDim.x * gridDim.x) {
     Track &track = generator.NextTrack();
@@ -121,7 +121,13 @@ __global__ void InitPrimaries(ParticleGenerator generator, int startEvent, int n
     track.initialRange = -1.0;
 
     track.pos = {0, 0, 0};
-    track.dir = {1.0, 0, 0};
+    if (rotatingParticleGun) {
+      const double phi = 2. * 3.14159 * i / numEvents;
+      const double eta = -5. + 10. * i / numEvents;
+      track.dir = {cos(phi), sin(phi), sinh(eta)};
+    } else {
+      track.dir = {1.0, 0, 0};
+    }
     track.navState.Clear();
     BVHNavigator::LocatePointIn(world, track.pos, track.navState, true);
 
@@ -150,7 +156,7 @@ __global__ void ClearQueue(adept::MParray *queue)
 
 void example13(int numParticles, double energy, int batch, const int *MCIndex_host,
                ScoringPerVolume *scoringPerVolume_host, GlobalScoring *globalScoring_host, int numVolumes,
-               int numPlaced, G4HepEmState *state)
+               int numPlaced, G4HepEmState *state, bool rotatingParticleGun)
 {
   NVTXTracer tracer("InitG4HepEM");
   InitG4HepEmGPU(state);
@@ -271,7 +277,7 @@ void example13(int numParticles, double energy, int batch, const int *MCIndex_ho
     ParticleGenerator electronGenerator(electrons.tracks, electrons.slotManager, electrons.queues.currentlyActive);
     auto world_dev = vecgeom::cxx::CudaManager::Instance().world_gpu();
     InitPrimaries<<<initBlocks, InitThreads, 0, stream>>>(electronGenerator, startEvent, chunk, energy, world_dev,
-                                                          globalScoring);
+                                                          globalScoring, rotatingParticleGun);
     COPCORE_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     stats->inFlight[ParticleType::Electron] = chunk;
