@@ -9,7 +9,7 @@
 #ifndef NVTX_H
 #define NVTX_H
 
-#if defined USE_NVTX && !defined __CUDACC__
+#if defined USE_NVTX
 
 #include "nvToolsExt.h"
 
