@@ -103,6 +103,11 @@ target_include_directories(AdePT
     $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>)
 target_link_libraries(AdePT INTERFACE CopCore::CopCore)
 
+# Optional library to activate NVTX annotations for profiling:
+add_library(NVTX INTERFACE)
+target_link_libraries(NVTX INTERFACE nvToolsExt)
+target_compile_definitions(NVTX INTERFACE -DUSE_NVTX)
+
 add_subdirectory(tracking)
 add_subdirectory(test)
 add_subdirectory(examples)
