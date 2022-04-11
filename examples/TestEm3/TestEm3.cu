@@ -334,10 +334,11 @@ void TestEm3(const vecgeom::cxx::VPlacedVolume *world, int numParticles, double 
       // *** ELECTRONS ***
       int numElectrons = stats->inFlight[ParticleType::Electron];
       if (numElectrons > 0) {
-        transportBlocks = (numElectrons + ThreadsPerBlock - 1) / ThreadsPerBlock;
+        const auto localThreadsPerBlock = numElectrons < 4*ThreadsPerBlock ? ThreadsPerBlock / 4 : ThreadsPerBlock;
+        transportBlocks = (numElectrons + localThreadsPerBlock - 1) / localThreadsPerBlock;
         transportBlocks = std::min(transportBlocks, MaxBlocks);
 
-        TransportElectrons<<<transportBlocks, ThreadsPerBlock, 0, electrons.stream>>>(
+        TransportElectrons<<<transportBlocks, localThreadsPerBlock, 0, electrons.stream>>>(
             electrons.tracks, electrons.queues.currentlyActive, secondaries, electrons.queues.nextActive, globalScoring,
             scoringPerVolume);
 
@@ -348,10 +349,11 @@ void TestEm3(const vecgeom::cxx::VPlacedVolume *world, int numParticles, double 
       // *** POSITRONS ***
       int numPositrons = stats->inFlight[ParticleType::Positron];
       if (numPositrons > 0) {
-        transportBlocks = (numPositrons + ThreadsPerBlock - 1) / ThreadsPerBlock;
+        const auto localThreadsPerBlock = numPositrons < 4*ThreadsPerBlock ? ThreadsPerBlock / 4 : ThreadsPerBlock;
+        transportBlocks = (numPositrons + localThreadsPerBlock - 1) / localThreadsPerBlock;
         transportBlocks = std::min(transportBlocks, MaxBlocks);
 
-        TransportPositrons<<<transportBlocks, ThreadsPerBlock, 0, positrons.stream>>>(
+        TransportPositrons<<<transportBlocks, localThreadsPerBlock, 0, positrons.stream>>>(
             positrons.tracks, positrons.queues.currentlyActive, secondaries, positrons.queues.nextActive, globalScoring,
             scoringPerVolume);
 
@@ -362,10 +364,11 @@ void TestEm3(const vecgeom::cxx::VPlacedVolume *world, int numParticles, double 
       // *** GAMMAS ***
       int numGammas = stats->inFlight[ParticleType::Gamma];
       if (numGammas > 0) {
-        transportBlocks = (numGammas + ThreadsPerBlock - 1) / ThreadsPerBlock;
+        const auto localThreadsPerBlock = numGammas < 4*ThreadsPerBlock ? ThreadsPerBlock / 4 : ThreadsPerBlock;
+        transportBlocks = (numGammas + localThreadsPerBlock - 1) / localThreadsPerBlock;
         transportBlocks = std::min(transportBlocks, MaxBlocks);
 
-        TransportGammas<<<transportBlocks, ThreadsPerBlock, 0, gammas.stream>>>(
+        TransportGammas<<<transportBlocks, localThreadsPerBlock, 0, gammas.stream>>>(
             gammas.tracks, gammas.queues.currentlyActive, secondaries, gammas.queues.nextActive, globalScoring,
             scoringPerVolume);
 
