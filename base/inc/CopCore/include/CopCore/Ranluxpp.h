@@ -4,7 +4,10 @@
 #ifndef COPCORE_RANLUXPP_H_
 #define COPCORE_RANLUXPP_H_
 
-#include <CopCore/Global.h>
+#ifndef __CUDACC__
+#define __host__
+#define __device__
+#endif
 
 #include "ranluxpp/mulmod.h"
 #include "ranluxpp/ranlux_lcg.h"
