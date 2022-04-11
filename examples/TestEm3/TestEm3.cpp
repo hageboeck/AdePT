@@ -199,7 +199,7 @@ int main(int argc, char *argv[])
   OPTION_INT(particles, 1000);
   OPTION_DOUBLE(energy, 10); // entered in GeV
   energy *= copcore::units::GeV;
-  OPTION_INT(batch, -1);
+  OPTION_INT(batch, 1000);
 
   InitGeant4();
   CreateVecGeomWorld();
