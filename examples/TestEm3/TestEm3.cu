@@ -291,6 +291,7 @@ void TestEm3(const vecgeom::cxx::VPlacedVolume *world, int numParticles, double 
   }
 
   unsigned long long killed = 0;
+  NVTXTracer tracer("occupancy rising");
 
   for (int startEvent = 1; startEvent <= numParticles; startEvent += batch) {
     if (detailed) {
@@ -386,6 +387,8 @@ void TestEm3(const vecgeom::cxx::VPlacedVolume *world, int numParticles, double 
       for (int i = 0; i < ParticleType::NumParticleTypes; i++) {
         inFlight += stats->inFlight[i];
       }
+
+      tracer.setOccupancy(inFlight);
 
       // Swap the queues for the next iteration.
       electrons.queues.SwapActive();
