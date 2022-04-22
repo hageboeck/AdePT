@@ -18,6 +18,7 @@
 #include <G4HepEmGammaInteractionCompton.icc>
 #include <G4HepEmGammaInteractionConversion.icc>
 #include <G4HepEmGammaInteractionPhotoelectric.icc>
+#include <G4HepEmInteractionUtils.icc>
 
 __global__ __launch_bounds__(ThreadsPerBlock, MinBlocksPerSM)
 void TransportGammas(Track *gammas, const adept::MParray *active, Secondaries secondaries,
