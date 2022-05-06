@@ -19,12 +19,11 @@
 #include <G4HepEmGammaInteractionConversion.icc>
 #include <G4HepEmGammaInteractionPhotoelectric.icc>
 
-__device__ char g_nextInteractionForGamma[8'000'000];
-
 __global__ __launch_bounds__(ThreadsPerBlock, MinBlocksPerSM)
 void TransportGammas(Track *gammas, const adept::MParray *active, Secondaries secondaries,
                      adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                     ScoringPerVolume *scoringPerVolume)
+                     ScoringPerVolume *scoringPerVolume,
+                     SOAData * soaData)
 {
   int activeSize = active->size();
   for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < activeSize; i += blockDim.x * gridDim.x) {
@@ -38,8 +37,8 @@ void TransportGammas(Track *gammas, const adept::MParray *active, Secondaries se
     };
     
     // Ensure that this track doesn't undergo an interaction unless we overwrite this:
-    assert(i < sizeof(g_nextInteractionForGamma)/sizeof(g_nextInteractionForGamma[0]));
-    g_nextInteractionForGamma[i] = -1;
+    assert(i < SOAData::queueSize);
+    soaData->nextInteraction[i] = -1;
 
     // Init a track with the needed data to call into G4HepEm.
     G4HepEmGammaTrack gammaTrack;
@@ -113,8 +112,7 @@ void TransportGammas(Track *gammas, const adept::MParray *active, Secondaries se
     // (Will be resampled in the next iteration.)
     currentTrack.numIALeft[winnerProcessIndex] = -1.0;
 
-    g_nextInteractionForGamma[i] = winnerProcessIndex;
-    currentTrack.fPEmxSec = gammaTrack.GetPEmxSec();
+    soaData->nextInteraction[i] = winnerProcessIndex;
   }
 }
 
@@ -122,7 +120,8 @@ void TransportGammas(Track *gammas, const adept::MParray *active, Secondaries se
 template<unsigned int ProcessIndex>
 __device__ void RunInteractions(Track *gammas, const adept::MParray *active, Secondaries secondaries,
   adept::MParray *activeQueue, GlobalScoring *globalScoring,
-  ScoringPerVolume *scoringPerVolume, int candidates[], unsigned int size)
+  ScoringPerVolume *scoringPerVolume, int candidates[], unsigned int size,
+  SOAData const * soaData)
 {
   for (int i = threadIdx.x; i < size; i += blockDim.x) {
     const int slot = (*active)[candidates[i]];
@@ -246,7 +245,8 @@ template<int ProcessIndex>
 __global__ __launch_bounds__(ThreadsPerBlock, MinBlocksPerSM)
 void ComputeGammaInteractions(Track *gammas, const adept::MParray *active, Secondaries secondaries,
                               adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                              ScoringPerVolume *scoringPerVolume)
+                              ScoringPerVolume *scoringPerVolume,
+                              SOAData const * soaData)
 {
   constexpr int sharedSize = 12250;
   __shared__ int candidates[sharedSize];
@@ -257,7 +257,7 @@ void ComputeGammaInteractions(Track *gammas, const adept::MParray *active, Secon
 
   const auto activeSize = active->size();
   for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < activeSize; i += blockDim.x * gridDim.x) {
-    if (g_nextInteractionForGamma[i] == ProcessIndex) {
+    if (soaData->nextInteraction[i] == ProcessIndex) {
       const auto destination = atomicInc(&counter, (unsigned int)-1);
       candidates[destination % sharedSize] = i;
     } else atomicInc(&noopCounter, (unsigned int)-1);
@@ -267,7 +267,8 @@ void ComputeGammaInteractions(Track *gammas, const adept::MParray *active, Secon
       RunInteractions<ProcessIndex>(
           gammas, active, secondaries,
           activeQueue, globalScoring,
-          scoringPerVolume, candidates, counter);
+          scoringPerVolume, candidates, counter,
+          soaData);
       counter = 0;
       __syncthreads();
     }
@@ -278,7 +279,8 @@ void ComputeGammaInteractions(Track *gammas, const adept::MParray *active, Secon
   RunInteractions<ProcessIndex>(
       gammas, active, secondaries,
       activeQueue, globalScoring,
-      scoringPerVolume, candidates, counter);
+      scoringPerVolume, candidates, counter,
+      soaData);
 }
 
 
@@ -286,14 +288,17 @@ template
 __global__ __launch_bounds__(ThreadsPerBlock, MinBlocksPerSM)
 void ComputeGammaInteractions<0>(Track *gammas, const adept::MParray *active, Secondaries secondaries,
                                 adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                                ScoringPerVolume *scoringPerVolume);
+                                ScoringPerVolume *scoringPerVolume,
+                                SOAData const * soaData);
 template
 __global__ __launch_bounds__(ThreadsPerBlock, MinBlocksPerSM)
 void ComputeGammaInteractions<1>(Track *gammas, const adept::MParray *active, Secondaries secondaries,
                                 adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                                ScoringPerVolume *scoringPerVolume);
+                                ScoringPerVolume *scoringPerVolume,
+                                SOAData const * soaData);
 template
 __global__ __launch_bounds__(ThreadsPerBlock, MinBlocksPerSM)
 void ComputeGammaInteractions<2>(Track *gammas, const adept::MParray *active, Secondaries secondaries,
                                 adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                                ScoringPerVolume *scoringPerVolume);
+                                ScoringPerVolume *scoringPerVolume,
+                                SOAData const * soaData);

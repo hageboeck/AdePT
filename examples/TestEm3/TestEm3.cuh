@@ -154,7 +154,7 @@ __global__ void TransportPositrons(
 
 __global__ void TransportGammas(Track *gammas, const adept::MParray *active, Secondaries secondaries,
                                 adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                                ScoringPerVolume *scoringPerVolume);
+                                ScoringPerVolume *scoringPerVolume, SOAData * soaData);
 
 template<bool IsElectron, int ProcessIndex>
 __global__
@@ -166,7 +166,7 @@ template<int ProcessIndex>
 __global__
 void ComputeGammaInteractions(Track *gammas, const adept::MParray *active, Secondaries secondaries,
                               adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                              ScoringPerVolume *scoringPerVolume);
+                              ScoringPerVolume *scoringPerVolume, SOAData const * soaData);
 
 // Constant data structures from G4HepEm accessed by the kernels.
 // (defined in TestEm3.cu)
