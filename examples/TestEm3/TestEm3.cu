@@ -108,6 +108,7 @@ struct ParticleType {
   ParticleQueues queues;
   cudaStream_t stream;
   cudaEvent_t event;
+  SOAData * soaData;
 
   enum {
     Electron = 0,
@@ -240,6 +241,8 @@ void TestEm3(const vecgeom::cxx::VPlacedVolume *world, int numParticles, double 
 
     COPCORE_CUDA_CHECK(cudaStreamCreate(&particles[i].stream));
     COPCORE_CUDA_CHECK(cudaEventCreate(&particles[i].event));
+
+    COPCORE_CUDA_CHECK(cudaMalloc(&particles[i].soaData, sizeof(SOAData)));
   }
   COPCORE_CUDA_CHECK(cudaDeviceSynchronize());
 
@@ -342,17 +345,17 @@ void TestEm3(const vecgeom::cxx::VPlacedVolume *world, int numParticles, double 
 
         TransportElectrons<<<transportBlocks, ThreadsPerBlock, 0, electrons.stream>>>(
             electrons.tracks, electrons.queues.currentlyActive, secondaries, electrons.queues.nextActive, globalScoring,
-            scoringPerVolume);
+            scoringPerVolume, electrons.soaData);
 
         COPCORE_CUDA_CHECK(cudaEventRecord(electrons.event, electrons.stream));
         COPCORE_CUDA_CHECK(cudaStreamWaitEvent(interactionStreams[0], electrons.event, 0));
 
         ComputeInteraction</*IsElectron=*/true, 0><<<32, ThreadsPerBlock, 0, interactionStreams[0]>>>(
             electrons.tracks, electrons.queues.currentlyActive, secondaries, electrons.queues.nextActive, globalScoring,
-            scoringPerVolume);
+            scoringPerVolume, electrons.soaData);
         ComputeInteraction</*IsElectron=*/true, 1><<<128, ThreadsPerBlock, 0, electrons.stream>>>(
             electrons.tracks, electrons.queues.currentlyActive, secondaries, electrons.queues.nextActive, globalScoring,
-            scoringPerVolume);
+            scoringPerVolume, electrons.soaData);
         // Electrons don't do annihilation (Process == 2)
 
         for (auto streamToWaitFor : {interactionStreams[0], electrons.stream}) {
@@ -369,7 +372,7 @@ void TestEm3(const vecgeom::cxx::VPlacedVolume *world, int numParticles, double 
 
         TransportPositrons<<<transportBlocks, ThreadsPerBlock, 0, positrons.stream>>>(
             positrons.tracks, positrons.queues.currentlyActive, secondaries, positrons.queues.nextActive, globalScoring,
-            scoringPerVolume);
+            scoringPerVolume, positrons.soaData);
 
         COPCORE_CUDA_CHECK(cudaEventRecord(positrons.event, positrons.stream));
         COPCORE_CUDA_CHECK(cudaStreamWaitEvent(interactionStreams[1], positrons.event, 0));
@@ -377,13 +380,13 @@ void TestEm3(const vecgeom::cxx::VPlacedVolume *world, int numParticles, double 
 
         ComputeInteraction</*IsElectron=*/false, 0><<<32, ThreadsPerBlock, 0, interactionStreams[1]>>>(
             positrons.tracks, positrons.queues.currentlyActive, secondaries, positrons.queues.nextActive, globalScoring,
-            scoringPerVolume);
+            scoringPerVolume, positrons.soaData);
         ComputeInteraction</*IsElectron=*/false, 1><<<128, ThreadsPerBlock, 0, positrons.stream>>>(
             positrons.tracks, positrons.queues.currentlyActive, secondaries, positrons.queues.nextActive, globalScoring,
-            scoringPerVolume);
+            scoringPerVolume, positrons.soaData);
         ComputeInteraction</*IsElectron=*/false, 2><<<8, ThreadsPerBlock, 0, interactionStreams[2]>>>(
             positrons.tracks, positrons.queues.currentlyActive, secondaries, positrons.queues.nextActive, globalScoring,
-            scoringPerVolume);
+            scoringPerVolume, positrons.soaData);
 
         for (auto streamToWaitFor : {interactionStreams[1], interactionStreams[2], positrons.stream}) {
           COPCORE_CUDA_CHECK(cudaEventRecord(positrons.event, streamToWaitFor));
@@ -518,6 +521,8 @@ void TestEm3(const vecgeom::cxx::VPlacedVolume *world, int numParticles, double 
 
     COPCORE_CUDA_CHECK(cudaStreamDestroy(particles[i].stream));
     COPCORE_CUDA_CHECK(cudaEventDestroy(particles[i].event));
+
+    COPCORE_CUDA_CHECK(cudaFree(particles[i].soaData));
   }
 
   FreeG4HepEm(state);
