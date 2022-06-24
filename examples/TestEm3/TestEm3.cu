@@ -201,7 +201,7 @@ void TestEm3(const vecgeom::cxx::VPlacedVolume *world, int numParticles, double 
 
   // Capacity of the different containers aka the maximum number of particles.
   // Use 2/7 of GPU memory for each of e+/e-/gammas, leaving 1/7 for the rest.
-  int Capacity = deviceProp.totalGlobalMem / sizeof(Track) * (2.0 / 7.0);
+  const size_t Capacity = deviceProp.totalGlobalMem / sizeof(Track) * (2.0 / 7.0);
 
   int MaxBlocks = deviceProp.maxGridSize[0];
 
@@ -225,9 +225,9 @@ void TestEm3(const vecgeom::cxx::VPlacedVolume *world, int numParticles, double 
   //  * objects to manage slots inside the memory,
   //  * queues of slots to remember active particle and those needing relocation,
   //  * a stream and an event for synchronization of kernels.
-  size_t TracksSize  = sizeof(Track) * Capacity;
-  size_t ManagerSize = sizeof(SlotManager);
-  size_t QueueSize   = adept::MParray::SizeOfInstance(Capacity);
+  const size_t TracksSize  = sizeof(Track) * Capacity;
+  const size_t ManagerSize = sizeof(SlotManager);
+  const size_t QueueSize   = adept::MParray::SizeOfInstance(Capacity);
 
   ParticleType particles[ParticleType::NumParticleTypes];
   for (int i = 0; i < ParticleType::NumParticleTypes; i++) {
