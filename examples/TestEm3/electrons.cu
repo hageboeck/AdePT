@@ -292,13 +292,42 @@ void TransportPositrons(Track *positrons, const adept::MParray *active, Secondar
 }
 
 template<bool IsElectron, int ProcessIndex>
-__device__
-void RunInteractions(Track *electrons, const adept::MParray *active, Secondaries secondaries,
-    adept::MParray *activeQueue, GlobalScoring *globalScoring,
-    ScoringPerVolume *scoringPerVolume,
-    int candidates[], unsigned int size)
+__global__
+void ComputeInteraction(Track *electrons, const adept::MParray *active, Secondaries secondaries,
+                        adept::MParray *activeQueue, GlobalScoring *globalScoring,
+                        ScoringPerVolume *scoringPerVolume)
 {
-  for (int i = threadIdx.x; i < size; i += blockDim.x) {
+  constexpr unsigned int sharedSize = 12250;
+  __shared__ int candidates[sharedSize];
+  __shared__ unsigned int counter;
+  __shared__ unsigned int noopCounter;
+  counter = 0;
+  noopCounter = 0;
+
+  for (int i = threadIdx.x; i < sharedSize; i += blockDim.x) {
+    candidates[i] = -1;
+  }
+  __syncthreads();
+
+  const int activeSize = active->size();
+  assert(activeSize < sizeof(g_nextInteractionForEl)/sizeof(g_nextInteractionForEl[0]));
+  for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < activeSize; i += blockDim.x * gridDim.x) {
+    const auto winnerProcess = IsElectron ? g_nextInteractionForEl[i] : g_nextInteractionForPos[i];
+
+    if (winnerProcess == ProcessIndex) {
+      const auto destination = atomicInc(&counter, (unsigned int)-1);
+      candidates[destination % sharedSize] = i;
+    } else atomicInc(&noopCounter, (unsigned int)-1);
+  }
+
+  __syncthreads();
+  assert(counter < sharedSize);
+  if (threadIdx.x == 0 && counter >= sharedSize) {
+    printf("Error: Shared queue for %d exhausted to %d in %s:%d\n", ProcessIndex, counter, __FILE__, __LINE__);
+    asm("trap;");
+  }
+
+  for (int i = threadIdx.x; i < counter; i += blockDim.x) {
     const int slot = (*active)[candidates[i]];
     Track &currentTrack = electrons[slot];
     auto volume         = currentTrack.navState.Top();
@@ -383,50 +412,6 @@ void RunInteractions(Track *electrons, const adept::MParray *active, Secondaries
     }
   }
 }
-
-template<bool IsElectron, int ProcessIndex>
-__global__
-void ComputeInteraction(Track *electrons, const adept::MParray *active, Secondaries secondaries,
-                        adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                        ScoringPerVolume *scoringPerVolume,
-                        SOAData const * soaData)
-{
-  constexpr unsigned int sharedSize = 12250;
-  __shared__ int candidates[sharedSize];
-  __shared__ unsigned int counter;
-  __shared__ unsigned int noopCounter;
-  counter = 0;
-  noopCounter = 0;
-
-  const int activeSize = active->size();
-  assert(activeSize < sizeof(g_nextInteractionForEl)/sizeof(g_nextInteractionForEl[0]));
-  for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < activeSize; i += blockDim.x * gridDim.x) {
-    const auto winnerProcess = soaData->nextInteraction[i];
-
-    if (winnerProcess == ProcessIndex) {
-      const auto destination = atomicInc(&counter, (unsigned int)-1);
-      candidates[destination % sharedSize] = i;
-    } else atomicInc(&noopCounter, (unsigned int)-1);
-
-    if (counter >= sharedSize - blockDim.x) {
-      __syncthreads();
-      RunInteractions<IsElectron, ProcessIndex>(
-          electrons, active, secondaries,
-          activeQueue, globalScoring,
-          scoringPerVolume, candidates, counter);
-      counter = 0;
-      __syncthreads();
-    }
-  }
-
-  __syncthreads();
-
-  RunInteractions<IsElectron, ProcessIndex>(
-      electrons, active, secondaries,
-      activeQueue, globalScoring,
-      scoringPerVolume, candidates, counter);
-}
-
 
 template
 __global__ __launch_bounds__(ThreadsPerBlock, MinBlocksPerSM)
