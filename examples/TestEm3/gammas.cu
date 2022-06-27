@@ -132,7 +132,7 @@ void ComputeGammaInteractions(Track *gammas, const adept::MParray *active, Secon
 
   const int activeSize = active->size();
   for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < activeSize; i += blockDim.x * gridDim.x) {
-    const auto winnerProcess = g_nextInteractionForGamma[i];
+    const auto winnerProcess = soaData->nextInteraction[i];
 
     if (winnerProcess == ProcessIndex) {
       const auto destination = atomicInc(&counter, (unsigned int)-1);
