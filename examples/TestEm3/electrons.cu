@@ -28,8 +28,6 @@
 #include <G4HepEmElectronEnergyLossFluctuation.icc>
 #endif
 
-__device__ char g_nextInteractionForEl[8'000'000];
-__device__ char g_nextInteractionForPos[8'000'000];
 
 // Compute the physics and geometry step limit, transport the electrons while
 // applying the continuous effects and maybe a discrete process that could
@@ -295,7 +293,7 @@ template<bool IsElectron, int ProcessIndex>
 __global__
 void ComputeInteraction(Track *electrons, const adept::MParray *active, Secondaries secondaries,
                         adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                        ScoringPerVolume *scoringPerVolume)
+                        ScoringPerVolume *scoringPerVolume, SOAData const * soaData)
 {
   constexpr unsigned int sharedSize = 12250;
   __shared__ int candidates[sharedSize];
@@ -310,9 +308,8 @@ void ComputeInteraction(Track *electrons, const adept::MParray *active, Secondar
   __syncthreads();
 
   const int activeSize = active->size();
-  assert(activeSize < sizeof(g_nextInteractionForEl)/sizeof(g_nextInteractionForEl[0]));
   for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < activeSize; i += blockDim.x * gridDim.x) {
-    const auto winnerProcess = IsElectron ? g_nextInteractionForEl[i] : g_nextInteractionForPos[i];
+    const auto winnerProcess = IsElectron ? soaData->nextInteraction[i] : soaData->nextInteraction[i];
 
     if (winnerProcess == ProcessIndex) {
       const auto destination = atomicInc(&counter, (unsigned int)-1);
