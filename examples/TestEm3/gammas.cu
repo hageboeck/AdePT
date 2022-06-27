@@ -117,13 +117,39 @@ void TransportGammas(Track *gammas, const adept::MParray *active, Secondaries se
 }
 
 
-template<unsigned int ProcessIndex>
-__device__ void RunInteractions(Track *gammas, const adept::MParray *active, Secondaries secondaries,
-  adept::MParray *activeQueue, GlobalScoring *globalScoring,
-  ScoringPerVolume *scoringPerVolume, int candidates[], unsigned int size,
-  SOAData const * soaData)
+template<int ProcessIndex>
+__global__ __launch_bounds__(ThreadsPerBlock, MinBlocksPerSM)
+void ComputeGammaInteractions(Track *gammas, const adept::MParray *active, Secondaries secondaries,
+                              adept::MParray *activeQueue, GlobalScoring *globalScoring,
+                              ScoringPerVolume *scoringPerVolume, SOAData const * soaData)
 {
-  for (int i = threadIdx.x; i < size; i += blockDim.x) {
+  constexpr int sharedSize = 12250;
+  __shared__ int candidates[sharedSize];
+  __shared__ unsigned int counter;
+  __shared__ unsigned int noopCounter;
+  counter = 0;
+  noopCounter = 0;
+
+  const int activeSize = active->size();
+  for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < activeSize; i += blockDim.x * gridDim.x) {
+    const auto winnerProcess = g_nextInteractionForGamma[i];
+
+    if (winnerProcess == ProcessIndex) {
+      const auto destination = atomicInc(&counter, (unsigned int)-1);
+      candidates[destination % sharedSize] = i;
+    } else atomicInc(&noopCounter, (unsigned int)-1);
+  }
+
+  __syncthreads();
+  assert(counter < sharedSize);
+  if (threadIdx.x == 0 && counter >= sharedSize) {
+    printf("Error: Shared queue for %d exhausted to %d in %s:%d\n", ProcessIndex, counter, __FILE__, __LINE__);
+    __threadfence();
+    asm("trap;");
+  }
+
+
+  for (int i = threadIdx.x; i < counter; i += blockDim.x) {
     const int slot = (*active)[candidates[i]];
     Track &currentTrack = gammas[slot];
     const auto volume         = currentTrack.navState.Top();
@@ -238,49 +264,6 @@ __device__ void RunInteractions(Track *gammas, const adept::MParray *active, Sec
       // The current track is killed by not enqueuing into the next activeQueue.
     }
   }
-}
-
-
-template<int ProcessIndex>
-__global__ __launch_bounds__(ThreadsPerBlock, MinBlocksPerSM)
-void ComputeGammaInteractions(Track *gammas, const adept::MParray *active, Secondaries secondaries,
-                              adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                              ScoringPerVolume *scoringPerVolume,
-                              SOAData const * soaData)
-{
-  constexpr int sharedSize = 12250;
-  __shared__ int candidates[sharedSize];
-  __shared__ unsigned int counter;
-  __shared__ unsigned int noopCounter;
-  counter = 0;
-  noopCounter = 0;
-
-  const auto activeSize = active->size();
-  for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < activeSize; i += blockDim.x * gridDim.x) {
-    if (soaData->nextInteraction[i] == ProcessIndex) {
-      const auto destination = atomicInc(&counter, (unsigned int)-1);
-      candidates[destination % sharedSize] = i;
-    } else atomicInc(&noopCounter, (unsigned int)-1);
-
-    if (counter >= sharedSize - blockDim.x) {
-      __syncthreads();
-      RunInteractions<ProcessIndex>(
-          gammas, active, secondaries,
-          activeQueue, globalScoring,
-          scoringPerVolume, candidates, counter,
-          soaData);
-      counter = 0;
-      __syncthreads();
-    }
-  }
-
-  __syncthreads();
-
-  RunInteractions<ProcessIndex>(
-      gammas, active, secondaries,
-      activeQueue, globalScoring,
-      scoringPerVolume, candidates, counter,
-      soaData);
 }
 
 
