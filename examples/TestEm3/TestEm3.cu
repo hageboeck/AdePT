@@ -201,7 +201,7 @@ void TestEm3(const vecgeom::cxx::VPlacedVolume *world, int numParticles, double 
 
   // Capacity of the different containers aka the maximum number of particles.
   // Use 2/7 of GPU memory for each of e+/e-/gammas, leaving 1/7 for the rest.
-  const size_t Capacity = deviceProp.totalGlobalMem / sizeof(Track) * (2.0 / 7.0);
+  const size_t Capacity = (deviceProp.totalGlobalMem / sizeof(Track) * (2.0 / 7.0)) * 0.8; // bernhard's GUI needs some more VRAM
 
   int MaxBlocks = deviceProp.maxGridSize[0];
 
