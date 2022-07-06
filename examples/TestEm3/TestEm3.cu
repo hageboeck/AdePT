@@ -201,7 +201,8 @@ void TestEm3(const vecgeom::cxx::VPlacedVolume *world, int numParticles, double 
 
   // Capacity of the different containers aka the maximum number of particles.
   // Use 2/7 of GPU memory for each of e+/e-/gammas, leaving 1/7 for the rest.
-  const size_t Capacity = (deviceProp.totalGlobalMem / sizeof(Track) * (2.0 / 7.0)) * 0.8; // bernhard's GUI needs some more VRAM
+  const size_t Capacity =
+      (deviceProp.totalGlobalMem / sizeof(Track) * (2.0 / 7.0)) * 0.8; // bernhard's GUI needs some more VRAM
 
   int MaxBlocks = deviceProp.maxGridSize[0];
 
@@ -242,7 +243,8 @@ void TestEm3(const vecgeom::cxx::VPlacedVolume *world, int numParticles, double 
     COPCORE_CUDA_CHECK(cudaStreamCreate(&particles[i].stream));
     COPCORE_CUDA_CHECK(cudaEventCreate(&particles[i].event));
 
-    COPCORE_CUDA_CHECK(cudaMalloc(&particles[i].soaData.nextInteraction, sizeof(SOAData::nextInteraction[0]) * Capacity));
+    COPCORE_CUDA_CHECK(
+        cudaMalloc(&particles[i].soaData.nextInteraction, sizeof(SOAData::nextInteraction[0]) * Capacity));
   }
   COPCORE_CUDA_CHECK(cudaDeviceSynchronize());
 
@@ -255,7 +257,8 @@ void TestEm3(const vecgeom::cxx::VPlacedVolume *world, int numParticles, double 
   COPCORE_CUDA_CHECK(cudaStreamCreate(&stream));
 
   cudaStream_t interactionStreams[3];
-  for (auto i = 0; i < 3; ++i) COPCORE_CUDA_CHECK(cudaStreamCreate(&interactionStreams[i]));
+  for (auto i = 0; i < 3; ++i)
+    COPCORE_CUDA_CHECK(cudaStreamCreate(&interactionStreams[i]));
 
   // Allocate memory to score charged track length and energy deposit per volume.
   double *chargedTrackLength = nullptr;
@@ -314,10 +317,10 @@ void TestEm3(const vecgeom::cxx::VPlacedVolume *world, int numParticles, double 
     }
 
     // Initialize primary particles.
-    int initBlocks            = (chunk + ThreadsPerBlock - 1) / ThreadsPerBlock;
+    int initBlocks = (chunk + ThreadsPerBlock - 1) / ThreadsPerBlock;
     ParticleGenerator electronGenerator(electrons.tracks, electrons.slotManager, electrons.queues.currentlyActive);
     InitPrimaries<<<initBlocks, ThreadsPerBlock, 0, stream>>>(electronGenerator, startEvent, chunk, energy, startX,
-                                                          world_dev, globalScoring);
+                                                              world_dev, globalScoring);
     COPCORE_CUDA_CHECK(cudaStreamSynchronize(stream));
 
     stats->inFlight[ParticleType::Electron] = chunk;
@@ -327,7 +330,7 @@ void TestEm3(const vecgeom::cxx::VPlacedVolume *world, int numParticles, double 
     int transportBlocks;
 
     int inFlight;
-    int loopingNo = 0;
+    int loopingNo         = 0;
     int previousElectrons = -1, previousPositrons = -1;
 
     do {
@@ -457,13 +460,13 @@ void TestEm3(const vecgeom::cxx::VPlacedVolume *world, int numParticles, double 
       // Check if only charged particles are left that are looping.
       numElectrons = stats->inFlight[ParticleType::Electron];
       numPositrons = stats->inFlight[ParticleType::Positron];
-      numGammas = stats->inFlight[ParticleType::Gamma];
+      numGammas    = stats->inFlight[ParticleType::Gamma];
       if (numElectrons == previousElectrons && numPositrons == previousPositrons && numGammas == 0) {
         loopingNo++;
       } else {
         previousElectrons = numElectrons;
         previousPositrons = numPositrons;
-        loopingNo = 0;
+        loopingNo         = 0;
       }
 
     } while (inFlight > 0 && loopingNo < 200);
@@ -510,7 +513,8 @@ void TestEm3(const vecgeom::cxx::VPlacedVolume *world, int numParticles, double 
 
   COPCORE_CUDA_CHECK(cudaStreamDestroy(stream));
 
-  for (auto i = 0; i < 3; ++i) COPCORE_CUDA_CHECK(cudaStreamDestroy(interactionStreams[i]));
+  for (auto i = 0; i < 3; ++i)
+    COPCORE_CUDA_CHECK(cudaStreamDestroy(interactionStreams[i]));
 
   for (int i = 0; i < ParticleType::NumParticleTypes; i++) {
     COPCORE_CUDA_CHECK(cudaFree(particles[i].tracks));

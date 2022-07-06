@@ -17,10 +17,10 @@
 #include <VecGeom/base/Vector3D.h>
 #include <VecGeom/navigation/NavStateIndex.h>
 
-constexpr int ThreadsPerBlock = 256;
-constexpr int ThreadsPerSM = 256;
-constexpr int BlocksPerSM = ThreadsPerSM / ThreadsPerBlock;
-constexpr int RegistersPerThread = 64*1024 / ThreadsPerSM;
+constexpr int ThreadsPerBlock    = 256;
+constexpr int ThreadsPerSM       = 256;
+constexpr int BlocksPerSM        = ThreadsPerSM / ThreadsPerBlock;
+constexpr int RegistersPerThread = 64 * 1024 / ThreadsPerSM;
 
 // A data structure to represent a particle track. The particle type is implicit
 // by the queue and not stored in memory.
@@ -59,8 +59,8 @@ struct Track {
 };
 
 struct SOAData {
-//  static constexpr size_t queueSize = 4'000'000;
-  char*     nextInteraction;
+  //  static constexpr size_t queueSize = 4'000'000;
+  char *nextInteraction;
   // double * numIALeft;
 };
 
@@ -69,13 +69,11 @@ extern __constant__ __device__ int Zero;
 
 class RanluxppDoubleEngine : public G4HepEmRandomEngine {
   // Wrapper functions to call into RanluxppDouble.
-  static __host__ __device__ __attribute__((noinline))
-  double FlatWrapper(void *object)
+  static __host__ __device__ __attribute__((noinline)) double FlatWrapper(void *object)
   {
     return ((RanluxppDouble *)object)->Rndm();
   }
-  static __host__ __device__ __attribute__((noinline))
-  void FlatArrayWrapper(void *object, const int size, double *vect)
+  static __host__ __device__ __attribute__((noinline)) void FlatArrayWrapper(void *object, const int size, double *vect)
   {
     for (int i = 0; i < size; i++) {
       vect[i] = ((RanluxppDouble *)object)->Rndm();
@@ -99,7 +97,6 @@ public:
 #endif
   }
 };
-
 
 // A data structure to manage slots in the track storage.
 class SlotManager {
@@ -125,7 +122,9 @@ class ParticleGenerator {
 
 public:
   __host__ __device__ ParticleGenerator(Track *tracks, SlotManager *slotManager, adept::MParray *activeQueue)
-    : fTracks(tracks), fSlotManager(slotManager), fActiveQueue(activeQueue) {}
+      : fTracks(tracks), fSlotManager(slotManager), fActiveQueue(activeQueue)
+  {
+  }
 
   __host__ __device__ Track &NextTrack()
   {
@@ -145,30 +144,27 @@ struct Secondaries {
   ParticleGenerator gammas;
 };
 
-
 // Kernels in different TUs.
-__global__ void TransportElectrons(
-    Track *electrons, const adept::MParray *active, Secondaries secondaries, adept::MParray *activeQueue,
-    GlobalScoring *globalScoring, ScoringPerVolume *scoringPerVolume, SOAData soaData);
-__global__ void TransportPositrons(
-    Track *positrons, const adept::MParray *active, Secondaries secondaries, adept::MParray *activeQueue,
-    GlobalScoring *globalScoring, ScoringPerVolume *scoringPerVolume, SOAData soaData);
+__global__ void TransportElectrons(Track *electrons, const adept::MParray *active, Secondaries secondaries,
+                                   adept::MParray *activeQueue, GlobalScoring *globalScoring,
+                                   ScoringPerVolume *scoringPerVolume, SOAData soaData);
+__global__ void TransportPositrons(Track *positrons, const adept::MParray *active, Secondaries secondaries,
+                                   adept::MParray *activeQueue, GlobalScoring *globalScoring,
+                                   ScoringPerVolume *scoringPerVolume, SOAData soaData);
 
 __global__ void TransportGammas(Track *gammas, const adept::MParray *active, Secondaries secondaries,
                                 adept::MParray *activeQueue, GlobalScoring *globalScoring,
                                 ScoringPerVolume *scoringPerVolume, SOAData soaData);
 
-template<bool IsElectron, int ProcessIndex>
-__global__
-void ComputeInteraction(Track *electrons, const adept::MParray *active, Secondaries secondaries,
-                        adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                        ScoringPerVolume *scoringPerVolume, SOAData soaData);
+template <bool IsElectron, int ProcessIndex>
+__global__ void ComputeInteraction(Track *electrons, const adept::MParray *active, Secondaries secondaries,
+                                   adept::MParray *activeQueue, GlobalScoring *globalScoring,
+                                   ScoringPerVolume *scoringPerVolume, SOAData soaData);
 
-template<int ProcessIndex>
-__global__
-void ComputeGammaInteractions(Track *gammas, const adept::MParray *active, Secondaries secondaries,
-                              adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                              ScoringPerVolume *scoringPerVolume, SOAData soaData);
+template <int ProcessIndex>
+__global__ void ComputeGammaInteractions(Track *gammas, const adept::MParray *active, Secondaries secondaries,
+                                         adept::MParray *activeQueue, GlobalScoring *globalScoring,
+                                         ScoringPerVolume *scoringPerVolume, SOAData soaData);
 
 // Constant data structures from G4HepEm accessed by the kernels.
 // (defined in TestEm3.cu)

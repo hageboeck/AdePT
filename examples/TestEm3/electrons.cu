@@ -28,17 +28,14 @@
 #include <G4HepEmElectronEnergyLossFluctuation.icc>
 #endif
 
-
 // Compute the physics and geometry step limit, transport the electrons while
 // applying the continuous effects and maybe a discrete process that could
 // generate secondaries.
 template <bool IsElectron>
-static __device__ __forceinline__
-void TransportElectrons(Track *electrons, const adept::MParray *active,
-                        Secondaries &secondaries, adept::MParray *activeQueue,
-                        GlobalScoring *globalScoring,
-                        ScoringPerVolume *scoringPerVolume,
-                        SOAData soaData)
+static __device__ __forceinline__ void TransportElectrons(Track *electrons, const adept::MParray *active,
+                                                          Secondaries &secondaries, adept::MParray *activeQueue,
+                                                          GlobalScoring *globalScoring,
+                                                          ScoringPerVolume *scoringPerVolume, SOAData soaData)
 {
   constexpr int Charge  = IsElectron ? -1 : 1;
   constexpr double Mass = copcore::units::kElectronMassC2;
@@ -51,9 +48,7 @@ void TransportElectrons(Track *electrons, const adept::MParray *active,
     const int volumeID   = currentTrack.navState.Top()->id();
     const int theMCIndex = MCIndex[volumeID];
 
-    auto survive = [&] {
-      activeQueue->push_back(slot);
-    };
+    auto survive = [&] { activeQueue->push_back(slot); };
 
     // Ensure that this track doesn't undergo an interaction unless we overwrite this:
     soaData.nextInteraction[i] = -1;
@@ -211,14 +206,14 @@ void TransportElectrons(Track *electrons, const adept::MParray *active,
         gamma1.InitAsSecondary(/*parent=*/currentTrack);
         newRNG.Advance();
         gamma1.rngState = newRNG;
-        gamma1.energy = copcore::units::kElectronMassC2;
+        gamma1.energy   = copcore::units::kElectronMassC2;
         gamma1.dir.Set(sint * cosPhi, sint * sinPhi, cost);
 
         gamma2.InitAsSecondary(/*parent=*/currentTrack);
         // Reuse the RNG state of the dying track.
         gamma2.rngState = currentTrack.rngState;
-        gamma2.energy = copcore::units::kElectronMassC2;
-        gamma2.dir    = -gamma1.dir;
+        gamma2.energy   = copcore::units::kElectronMassC2;
+        gamma2.dir      = -gamma1.dir;
       }
       // Particles are killed by not enqueuing them into the new activeQueue.
       continue;
@@ -267,45 +262,41 @@ void TransportElectrons(Track *electrons, const adept::MParray *active,
   }
 }
 
-
 // Instantiate kernels for electrons and positrons.
-__global__ __launch_bounds__(ThreadsPerBlock, BlocksPerSM)
-void TransportElectrons(Track *electrons, const adept::MParray *active, Secondaries secondaries,
-                        adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                        ScoringPerVolume *scoringPerVolume,
-                        SOAData soaData)
+__global__ __launch_bounds__(ThreadsPerBlock,
+                             BlocksPerSM) void TransportElectrons(Track *electrons, const adept::MParray *active,
+                                                                  Secondaries secondaries, adept::MParray *activeQueue,
+                                                                  GlobalScoring *globalScoring,
+                                                                  ScoringPerVolume *scoringPerVolume, SOAData soaData)
 {
-  TransportElectrons</*IsElectron*/ true>(electrons, active, secondaries, activeQueue, globalScoring, scoringPerVolume, soaData);
+  TransportElectrons</*IsElectron*/ true>(electrons, active, secondaries, activeQueue, globalScoring, scoringPerVolume,
+                                          soaData);
 }
-__global__ __launch_bounds__(ThreadsPerBlock, BlocksPerSM)
-void TransportPositrons(Track *positrons, const adept::MParray *active, Secondaries secondaries,
-                        adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                        ScoringPerVolume *scoringPerVolume,
-                        SOAData soaData)
+__global__ __launch_bounds__(ThreadsPerBlock,
+                             BlocksPerSM) void TransportPositrons(Track *positrons, const adept::MParray *active,
+                                                                  Secondaries secondaries, adept::MParray *activeQueue,
+                                                                  GlobalScoring *globalScoring,
+                                                                  ScoringPerVolume *scoringPerVolume, SOAData soaData)
 {
-  TransportElectrons</*IsElectron*/ false>(positrons, active, secondaries, activeQueue, globalScoring,
-                                           scoringPerVolume,
+  TransportElectrons</*IsElectron*/ false>(positrons, active, secondaries, activeQueue, globalScoring, scoringPerVolume,
                                            soaData);
 }
 
-
-template<bool IsElectron, int ProcessIndex>
-__device__
-void ExecuteInteraction(Track *electrons, const adept::MParray *active, Secondaries secondaries,
-                        adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                        ScoringPerVolume *scoringPerVolume, SOAData soaData,
-                        int const * candidates, unsigned int const numCandidates) {
+template <bool IsElectron, int ProcessIndex>
+__device__ void ExecuteInteraction(Track *electrons, const adept::MParray *active, Secondaries secondaries,
+                                   adept::MParray *activeQueue, GlobalScoring *globalScoring,
+                                   ScoringPerVolume *scoringPerVolume, SOAData soaData, int const *candidates,
+                                   unsigned int const numCandidates)
+{
 
   for (int i = threadIdx.x; i < numCandidates; i += blockDim.x) {
-    const int slot = (*active)[candidates[i]];
+    const int slot      = (*active)[candidates[i]];
     Track &currentTrack = electrons[slot];
     auto volume         = currentTrack.navState.Top();
     int volumeID        = volume->id();
     int theMCIndex      = MCIndex[volumeID];
 
-    auto survive = [&] {
-      activeQueue->push_back(slot);
-    };
+    auto survive = [&] { activeQueue->push_back(slot); };
 
     const double energy   = currentTrack.energy;
     const double theElCut = g4HepEmData.fTheMatCutData->fMatCutData[theMCIndex].fSecElProdCutE;
@@ -327,7 +318,7 @@ void ExecuteInteraction(Track *electrons, const adept::MParray *active, Secondar
 
       secondary.InitAsSecondary(/*parent=*/currentTrack);
       secondary.rngState = newRNG;
-      secondary.energy = deltaEkin;
+      secondary.energy   = deltaEkin;
       secondary.dir.Set(dirSecondary[0], dirSecondary[1], dirSecondary[2]);
 
       currentTrack.energy = energy - deltaEkin;
@@ -337,10 +328,10 @@ void ExecuteInteraction(Track *electrons, const adept::MParray *active, Secondar
       // Invoke model for Bremsstrahlung: either SB- or Rel-Brem.
       double logEnergy = std::log(energy);
       double deltaEkin = energy < g4HepEmPars.fElectronBremModelLim
-                            ? G4HepEmElectronInteractionBrem::SampleETransferSB(&g4HepEmData, energy, logEnergy,
-                                                                                theMCIndex, &rnge, IsElectron)
-                            : G4HepEmElectronInteractionBrem::SampleETransferRB(&g4HepEmData, energy, logEnergy,
-                                                                                theMCIndex, &rnge, IsElectron);
+                             ? G4HepEmElectronInteractionBrem::SampleETransferSB(&g4HepEmData, energy, logEnergy,
+                                                                                 theMCIndex, &rnge, IsElectron)
+                             : G4HepEmElectronInteractionBrem::SampleETransferRB(&g4HepEmData, energy, logEnergy,
+                                                                                 theMCIndex, &rnge, IsElectron);
 
       double dirPrimary[] = {currentTrack.dir.x(), currentTrack.dir.y(), currentTrack.dir.z()};
       double dirSecondary[3];
@@ -351,7 +342,7 @@ void ExecuteInteraction(Track *electrons, const adept::MParray *active, Secondar
 
       gamma.InitAsSecondary(/*parent=*/currentTrack);
       gamma.rngState = newRNG;
-      gamma.energy = deltaEkin;
+      gamma.energy   = deltaEkin;
       gamma.dir.Set(dirSecondary[0], dirSecondary[1], dirSecondary[2]);
 
       currentTrack.energy = energy - deltaEkin;
@@ -372,13 +363,13 @@ void ExecuteInteraction(Track *electrons, const adept::MParray *active, Secondar
 
       gamma1.InitAsSecondary(/*parent=*/currentTrack);
       gamma1.rngState = newRNG;
-      gamma1.energy = theGamma1Ekin;
+      gamma1.energy   = theGamma1Ekin;
       gamma1.dir.Set(theGamma1Dir[0], theGamma1Dir[1], theGamma1Dir[2]);
 
       gamma2.InitAsSecondary(/*parent=*/currentTrack);
       // Reuse the RNG state of the dying track.
       gamma2.rngState = currentTrack.rngState;
-      gamma2.energy = theGamma2Ekin;
+      gamma2.energy   = theGamma2Ekin;
       gamma2.dir.Set(theGamma2Dir[0], theGamma2Dir[1], theGamma2Dir[2]);
 
       // The current track is killed by not enqueuing into the next activeQueue.
@@ -386,23 +377,22 @@ void ExecuteInteraction(Track *electrons, const adept::MParray *active, Secondar
   }
 }
 
-template<bool IsElectron, int ProcessIndex>
-__global__
-void ComputeInteraction(Track *electrons, const adept::MParray *active, Secondaries secondaries,
-                        adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                        ScoringPerVolume *scoringPerVolume, SOAData soaData)
+template <bool IsElectron, int ProcessIndex>
+__global__ void ComputeInteraction(Track *electrons, const adept::MParray *active, Secondaries secondaries,
+                                   adept::MParray *activeQueue, GlobalScoring *globalScoring,
+                                   ScoringPerVolume *scoringPerVolume, SOAData soaData)
 {
   constexpr unsigned int sharedSize = 12250 / 2 / 2;
   __shared__ int candidates[sharedSize];
   __shared__ unsigned int counter;
   __shared__ int threadsRunning;
-  counter = 0;
+  counter        = 0;
   threadsRunning = 0;
 
 #ifndef NDEBUG
   __shared__ unsigned int todoCounter;
   __shared__ unsigned int particlesDone;
-  todoCounter = 0;
+  todoCounter   = 0;
   particlesDone = 0;
   __syncthreads();
   for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < active->size(); i += blockDim.x * gridDim.x) {
@@ -414,12 +404,12 @@ void ComputeInteraction(Track *electrons, const adept::MParray *active, Secondar
   __syncthreads();
 
   const auto activeSize = active->size();
-  int i = blockIdx.x * blockDim.x + threadIdx.x;
-  bool done = false;
+  int i                 = blockIdx.x * blockDim.x + threadIdx.x;
+  bool done             = false;
   do {
     while (i < activeSize && counter < sharedSize - blockDim.x) {
       if (soaData.nextInteraction[i] == ProcessIndex) {
-        const auto destination = atomicAdd(&counter, 1);
+        const auto destination  = atomicAdd(&counter, 1);
         candidates[destination] = i;
       }
       i += blockDim.x * gridDim.x;
@@ -440,12 +430,10 @@ void ComputeInteraction(Track *electrons, const adept::MParray *active, Secondar
     __syncthreads();
 #endif
 
-    ExecuteInteraction<IsElectron, ProcessIndex>(electrons, active, secondaries,
-      activeQueue, globalScoring,
-      scoringPerVolume, soaData,
-      candidates, counter);
+    ExecuteInteraction<IsElectron, ProcessIndex>(electrons, active, secondaries, activeQueue, globalScoring,
+                                                 scoringPerVolume, soaData, candidates, counter);
     __syncthreads();
-    counter = 0;
+    counter        = 0;
     threadsRunning = 0;
     __syncthreads();
   } while (!done);
@@ -453,35 +441,20 @@ void ComputeInteraction(Track *electrons, const adept::MParray *active, Secondar
   assert(particlesDone == todoCounter);
 }
 
-template
-__global__ __launch_bounds__(ThreadsPerBlock, BlocksPerSM)
-void ComputeInteraction<true, 0>(Track *electrons, const adept::MParray *active, Secondaries secondaries,
-                        adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                        ScoringPerVolume *scoringPerVolume,
-                        SOAData soaData);
-template
-__global__ __launch_bounds__(ThreadsPerBlock, BlocksPerSM)
-void ComputeInteraction<true, 1>(Track *electrons, const adept::MParray *active, Secondaries secondaries,
-                        adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                        ScoringPerVolume *scoringPerVolume,
-                        SOAData soaData);
+template __global__ __launch_bounds__(ThreadsPerBlock, BlocksPerSM) void ComputeInteraction<true, 0>(
+    Track *electrons, const adept::MParray *active, Secondaries secondaries, adept::MParray *activeQueue,
+    GlobalScoring *globalScoring, ScoringPerVolume *scoringPerVolume, SOAData soaData);
+template __global__ __launch_bounds__(ThreadsPerBlock, BlocksPerSM) void ComputeInteraction<true, 1>(
+    Track *electrons, const adept::MParray *active, Secondaries secondaries, adept::MParray *activeQueue,
+    GlobalScoring *globalScoring, ScoringPerVolume *scoringPerVolume, SOAData soaData);
 // Electrons don't do annihilation (Process == 2)
 
-template
-__global__ __launch_bounds__(ThreadsPerBlock, BlocksPerSM)
-void ComputeInteraction<false, 0>(Track *electrons, const adept::MParray *active, Secondaries secondaries,
-                        adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                        ScoringPerVolume *scoringPerVolume,
-                        SOAData soaData);
-template
-__global__ __launch_bounds__(ThreadsPerBlock, BlocksPerSM)
-void ComputeInteraction<false, 1>(Track *electrons, const adept::MParray *active, Secondaries secondaries,
-                        adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                        ScoringPerVolume *scoringPerVolume,
-                        SOAData soaData);
-template
-__global__ __launch_bounds__(ThreadsPerBlock, BlocksPerSM)
-void ComputeInteraction<false, 2>(Track *electrons, const adept::MParray *active, Secondaries secondaries,
-                        adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                        ScoringPerVolume *scoringPerVolume,
-                        SOAData soaData);
+template __global__ __launch_bounds__(ThreadsPerBlock, BlocksPerSM) void ComputeInteraction<false, 0>(
+    Track *electrons, const adept::MParray *active, Secondaries secondaries, adept::MParray *activeQueue,
+    GlobalScoring *globalScoring, ScoringPerVolume *scoringPerVolume, SOAData soaData);
+template __global__ __launch_bounds__(ThreadsPerBlock, BlocksPerSM) void ComputeInteraction<false, 1>(
+    Track *electrons, const adept::MParray *active, Secondaries secondaries, adept::MParray *activeQueue,
+    GlobalScoring *globalScoring, ScoringPerVolume *scoringPerVolume, SOAData soaData);
+template __global__ __launch_bounds__(ThreadsPerBlock, BlocksPerSM) void ComputeInteraction<false, 2>(
+    Track *electrons, const adept::MParray *active, Secondaries secondaries, adept::MParray *activeQueue,
+    GlobalScoring *globalScoring, ScoringPerVolume *scoringPerVolume, SOAData soaData);
