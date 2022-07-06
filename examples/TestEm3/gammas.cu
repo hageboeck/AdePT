@@ -47,8 +47,7 @@ __global__ __launch_bounds__(ThreadsPerBlock,
     for (int ip = 0; ip < 3; ++ip) {
       double numIALeft = currentTrack.numIALeft[ip];
       if (numIALeft <= 0) {
-        numIALeft                  = -std::log(currentTrack.Uniform());
-        currentTrack.numIALeft[ip] = numIALeft;
+        numIALeft = -std::log(currentTrack.Uniform());
       }
       theTrack->SetNumIALeft(numIALeft, ip);
     }
