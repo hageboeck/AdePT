@@ -108,7 +108,7 @@ struct ParticleType {
   ParticleQueues queues;
   cudaStream_t stream;
   cudaEvent_t event;
-  SOAData * soaData;
+  SOAData soaData;
 
   enum {
     Electron = 0,
@@ -201,7 +201,7 @@ void TestEm3(const vecgeom::cxx::VPlacedVolume *world, int numParticles, double 
 
   // Capacity of the different containers aka the maximum number of particles.
   // Use 2/7 of GPU memory for each of e+/e-/gammas, leaving 1/7 for the rest.
-  const size_t Capacity = deviceProp.totalGlobalMem / sizeof(Track) * (2.0 / 7.0);
+  const size_t Capacity = (deviceProp.totalGlobalMem / sizeof(Track) * (2.0 / 7.0)) * 0.8; // bernhard's GUI needs some more VRAM
 
   int MaxBlocks = deviceProp.maxGridSize[0];
 
@@ -242,7 +242,7 @@ void TestEm3(const vecgeom::cxx::VPlacedVolume *world, int numParticles, double 
     COPCORE_CUDA_CHECK(cudaStreamCreate(&particles[i].stream));
     COPCORE_CUDA_CHECK(cudaEventCreate(&particles[i].event));
 
-    COPCORE_CUDA_CHECK(cudaMalloc(&particles[i].soaData, sizeof(SOAData)));
+    COPCORE_CUDA_CHECK(cudaMalloc(&particles[i].soaData.nextInteraction, sizeof(SOAData::nextInteraction[0]) * Capacity));
   }
   COPCORE_CUDA_CHECK(cudaDeviceSynchronize());
 
@@ -522,7 +522,7 @@ void TestEm3(const vecgeom::cxx::VPlacedVolume *world, int numParticles, double 
     COPCORE_CUDA_CHECK(cudaStreamDestroy(particles[i].stream));
     COPCORE_CUDA_CHECK(cudaEventDestroy(particles[i].event));
 
-    COPCORE_CUDA_CHECK(cudaFree(particles[i].soaData));
+    COPCORE_CUDA_CHECK(cudaFree(particles[i].soaData.nextInteraction));
   }
 
   FreeG4HepEm(state);
