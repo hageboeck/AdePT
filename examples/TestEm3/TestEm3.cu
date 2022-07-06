@@ -242,7 +242,7 @@ void TestEm3(const vecgeom::cxx::VPlacedVolume *world, int numParticles, double 
     COPCORE_CUDA_CHECK(cudaStreamCreate(&particles[i].stream));
     COPCORE_CUDA_CHECK(cudaEventCreate(&particles[i].event));
 
-    COPCORE_CUDA_CHECK(cudaMalloc(&particles[i].soaData.nextInteraction, sizeof(char) * Capacity));
+    COPCORE_CUDA_CHECK(cudaMalloc(&particles[i].soaData.nextInteraction, sizeof(SOAData::nextInteraction[0]) * Capacity));
   }
   COPCORE_CUDA_CHECK(cudaDeviceSynchronize());
 
