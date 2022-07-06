@@ -17,7 +17,7 @@
 #include <VecGeom/base/Vector3D.h>
 #include <VecGeom/navigation/NavStateIndex.h>
 
-constexpr int ThreadsPerBlock    = 256;
+constexpr int ThreadsPerBlock    = 128;
 constexpr int ThreadsPerSM       = 256;
 constexpr int BlocksPerSM        = ThreadsPerSM / ThreadsPerBlock;
 constexpr int RegistersPerThread = 64 * 1024 / ThreadsPerSM;

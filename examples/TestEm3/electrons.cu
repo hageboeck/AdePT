@@ -41,6 +41,10 @@ static __device__ __forceinline__ void TransportElectrons(Track *electrons, cons
   constexpr double Mass = copcore::units::kElectronMassC2;
   fieldPropagatorConstBz fieldPropagatorBz(BzFieldValue);
 
+  // The shared memory handles the access pattern to the RNG better than global memory. And we don't have enough
+  // registers to keep it local. This is a byte array, because RanluxppDouble has a ctor that we do not want to run.
+  __shared__ std::byte rngSM[ThreadsPerBlock * sizeof(RanluxppDouble)];
+
   int activeSize = active->size();
   for (int i = blockIdx.x * blockDim.x + threadIdx.x; i < activeSize; i += blockDim.x * gridDim.x) {
     const int slot       = (*active)[i];
@@ -48,7 +52,13 @@ static __device__ __forceinline__ void TransportElectrons(Track *electrons, cons
     const int volumeID   = currentTrack.navState.Top()->id();
     const int theMCIndex = MCIndex[volumeID];
 
-    auto survive = [&] { activeQueue->push_back(slot); };
+    auto &rngState = *reinterpret_cast<RanluxppDouble *>(rngSM + threadIdx.x * sizeof(RanluxppDouble));
+    rngState       = currentTrack.rngState;
+
+    auto survive = [&](bool push = true) {
+      currentTrack.rngState = rngState;
+      if (push) activeQueue->push_back(slot);
+    };
 
     // Ensure that this track doesn't undergo an interaction unless we overwrite this:
     soaData.nextInteraction[i] = -1;
@@ -69,7 +79,7 @@ static __device__ __forceinline__ void TransportElectrons(Track *electrons, cons
     // Prepare a branched RNG state while threads are synchronized. Even if not
     // used, this provides a fresh round of random numbers and reduces thread
     // divergence because the RNG state doesn't need to be advanced later.
-    RanluxppDouble newRNG(currentTrack.rngState.BranchNoAdvance());
+    RanluxppDouble newRNG(rngState.BranchNoAdvance());
 
     // Compute safety, needed for MSC step limit.
     double safety = 0;
@@ -78,7 +88,7 @@ static __device__ __forceinline__ void TransportElectrons(Track *electrons, cons
     }
     theTrack->SetSafety(safety);
 
-    RanluxppDoubleEngine rnge(&currentTrack.rngState);
+    RanluxppDoubleEngine rnge(&rngState);
 
     // Sample the `number-of-interaction-left` and put it into the track.
     for (int ip = 0; ip < 3; ++ip) {
@@ -211,7 +221,7 @@ static __device__ __forceinline__ void TransportElectrons(Track *electrons, cons
 
         gamma2.InitAsSecondary(/*parent=*/currentTrack);
         // Reuse the RNG state of the dying track.
-        gamma2.rngState = currentTrack.rngState;
+        gamma2.rngState = rngState;
         gamma2.energy   = copcore::units::kElectronMassC2;
         gamma2.dir      = -gamma1.dir;
       }
@@ -256,9 +266,10 @@ static __device__ __forceinline__ void TransportElectrons(Track *electrons, cons
 
     // Also advance the current RNG state to provide a fresh round of random
     // numbers after MSC used up a fair share for sampling the displacement.
-    currentTrack.rngState.Advance();
+    rngState.Advance();
 
     soaData.nextInteraction[i] = winnerProcessIndex;
+    survive(false);
   }
 }
 
