@@ -108,7 +108,7 @@ struct ParticleType {
   ParticleQueues queues;
   cudaStream_t stream;
   cudaEvent_t event;
-  SOAData * soaData;
+  SOAData soaData;
 
   enum {
     Electron = 0,
@@ -242,7 +242,7 @@ void TestEm3(const vecgeom::cxx::VPlacedVolume *world, int numParticles, double 
     COPCORE_CUDA_CHECK(cudaStreamCreate(&particles[i].stream));
     COPCORE_CUDA_CHECK(cudaEventCreate(&particles[i].event));
 
-    COPCORE_CUDA_CHECK(cudaMalloc(&particles[i].soaData, sizeof(SOAData)));
+    COPCORE_CUDA_CHECK(cudaMalloc(&particles[i].soaData.nextInteraction, sizeof(char) * Capacity));
   }
   COPCORE_CUDA_CHECK(cudaDeviceSynchronize());
 
@@ -522,7 +522,7 @@ void TestEm3(const vecgeom::cxx::VPlacedVolume *world, int numParticles, double 
     COPCORE_CUDA_CHECK(cudaStreamDestroy(particles[i].stream));
     COPCORE_CUDA_CHECK(cudaEventDestroy(particles[i].event));
 
-    COPCORE_CUDA_CHECK(cudaFree(particles[i].soaData));
+    COPCORE_CUDA_CHECK(cudaFree(particles[i].soaData.nextInteraction));
   }
 
   FreeG4HepEm(state);

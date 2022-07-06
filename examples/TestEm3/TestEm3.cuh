@@ -59,8 +59,8 @@ struct Track {
 };
 
 struct SOAData {
-  static constexpr size_t queueSize = 4'000'000;
-  char     nextInteraction[queueSize];
+//  static constexpr size_t queueSize = 4'000'000;
+  char*     nextInteraction;
   // double * numIALeft;
 };
 
@@ -149,26 +149,26 @@ struct Secondaries {
 // Kernels in different TUs.
 __global__ void TransportElectrons(
     Track *electrons, const adept::MParray *active, Secondaries secondaries, adept::MParray *activeQueue,
-    GlobalScoring *globalScoring, ScoringPerVolume *scoringPerVolume, SOAData * soaData);
+    GlobalScoring *globalScoring, ScoringPerVolume *scoringPerVolume, SOAData soaData);
 __global__ void TransportPositrons(
     Track *positrons, const adept::MParray *active, Secondaries secondaries, adept::MParray *activeQueue,
-    GlobalScoring *globalScoring, ScoringPerVolume *scoringPerVolume, SOAData * soaData);
+    GlobalScoring *globalScoring, ScoringPerVolume *scoringPerVolume, SOAData soaData);
 
 __global__ void TransportGammas(Track *gammas, const adept::MParray *active, Secondaries secondaries,
                                 adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                                ScoringPerVolume *scoringPerVolume, SOAData * soaData);
+                                ScoringPerVolume *scoringPerVolume, SOAData soaData);
 
 template<bool IsElectron, int ProcessIndex>
 __global__
 void ComputeInteraction(Track *electrons, const adept::MParray *active, Secondaries secondaries,
                         adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                        ScoringPerVolume *scoringPerVolume, SOAData const * soaData);
+                        ScoringPerVolume *scoringPerVolume, SOAData soaData);
 
 template<int ProcessIndex>
 __global__
 void ComputeGammaInteractions(Track *gammas, const adept::MParray *active, Secondaries secondaries,
                               adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                              ScoringPerVolume *scoringPerVolume, SOAData const * soaData);
+                              ScoringPerVolume *scoringPerVolume, SOAData soaData);
 
 // Constant data structures from G4HepEm accessed by the kernels.
 // (defined in TestEm3.cu)
