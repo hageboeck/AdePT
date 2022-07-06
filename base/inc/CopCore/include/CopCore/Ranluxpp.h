@@ -53,7 +53,8 @@ public:
   RanluxppEngineImpl() = default;
 
   /// Produce next block of random bits
-  __host__ __device__ void Advance()
+  // We avoid inlining here because Advance() contributes a LOT of code which nvcc duplicates into several places.
+  __noinline__ __host__ __device__ void Advance()
   {
     uint64_t lcg[9];
     to_lcg(fState, fCarry, lcg);
