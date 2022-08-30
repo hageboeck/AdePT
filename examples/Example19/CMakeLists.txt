@@ -38,6 +38,10 @@ target_link_libraries(${TargetName}
 
 set_target_properties(${TargetName} PROPERTIES CUDA_SEPARABLE_COMPILATION ON CUDA_RESOLVE_DEVICE_SYMBOLS ON)
 
+if(THREADS_PER_BLOCK)
+  target_compile_definitions(${TargetName} PRIVATE THREADS_PER_BLOCK=${THREADS_PER_BLOCK})
+endif()
+
 # NVTX
 target_link_libraries(${TargetName} PRIVATE NVTX)
 

@@ -286,16 +286,16 @@ static __device__ __forceinline__ void TransportElectrons(Track *electrons, cons
 }
 
 // Instantiate kernels for electrons and positrons.
-__global__ void TransportElectrons(Track *electrons, const adept::MParray *active, Secondaries secondaries,
-                                   adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                                   ScoringPerVolume *scoringPerVolume, SOAData soaData)
+__global__ __launch_bounds__(ThreadsPerBlock, MinBlocksPerSM) void TransportElectrons(
+    Track *electrons, const adept::MParray *active, Secondaries secondaries, adept::MParray *activeQueue,
+    GlobalScoring *globalScoring, ScoringPerVolume *scoringPerVolume, SOAData soaData)
 {
   TransportElectrons</*IsElectron*/ true>(electrons, active, secondaries, activeQueue, globalScoring, scoringPerVolume,
                                           soaData);
 }
-__global__ void TransportPositrons(Track *positrons, const adept::MParray *active, Secondaries secondaries,
-                                   adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                                   ScoringPerVolume *scoringPerVolume, SOAData soaData)
+__global__ __launch_bounds__(ThreadsPerBlock, MinBlocksPerSM) void TransportPositrons(
+    Track *positrons, const adept::MParray *active, Secondaries secondaries, adept::MParray *activeQueue,
+    GlobalScoring *globalScoring, ScoringPerVolume *scoringPerVolume, SOAData soaData)
 {
   TransportElectrons</*IsElectron*/ false>(positrons, active, secondaries, activeQueue, globalScoring, scoringPerVolume,
                                            soaData);
@@ -391,38 +391,38 @@ __device__ void ElectronInteraction(int const globalSlot, SOAData const & /*soaD
   }
 }
 
-__global__ void IonizationEl(Track *particles, const adept::MParray *active, Secondaries secondaries,
-                             adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                             ScoringPerVolume *scoringPerVolume, SOAData const soaData)
+__global__ __launch_bounds__(ThreadsPerBlock, MinBlocksPerSM) void IonizationEl(
+    Track *particles, const adept::MParray *active, Secondaries secondaries, adept::MParray *activeQueue,
+    GlobalScoring *globalScoring, ScoringPerVolume *scoringPerVolume, SOAData const soaData)
 {
   InteractionLoop<0>(&ElectronInteraction<true, 0>, active, soaData, particles, secondaries, activeQueue, globalScoring,
                      scoringPerVolume);
 }
-__global__ void BremsstrahlungEl(Track *particles, const adept::MParray *active, Secondaries secondaries,
-                                 adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                                 ScoringPerVolume *scoringPerVolume, SOAData const soaData)
+__global__ __launch_bounds__(ThreadsPerBlock, MinBlocksPerSM) void BremsstrahlungEl(
+    Track *particles, const adept::MParray *active, Secondaries secondaries, adept::MParray *activeQueue,
+    GlobalScoring *globalScoring, ScoringPerVolume *scoringPerVolume, SOAData const soaData)
 {
   InteractionLoop<1>(&ElectronInteraction<true, 1>, active, soaData, particles, secondaries, activeQueue, globalScoring,
                      scoringPerVolume);
 }
 
-__global__ void IonizationPos(Track *particles, const adept::MParray *active, Secondaries secondaries,
-                              adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                              ScoringPerVolume *scoringPerVolume, SOAData const soaData)
+__global__ __launch_bounds__(ThreadsPerBlock, MinBlocksPerSM) void IonizationPos(
+    Track *particles, const adept::MParray *active, Secondaries secondaries, adept::MParray *activeQueue,
+    GlobalScoring *globalScoring, ScoringPerVolume *scoringPerVolume, SOAData const soaData)
 {
   InteractionLoop<0>(&ElectronInteraction<false, 0>, active, soaData, particles, secondaries, activeQueue,
                      globalScoring, scoringPerVolume);
 }
-__global__ void BremsstrahlungPos(Track *particles, const adept::MParray *active, Secondaries secondaries,
-                                  adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                                  ScoringPerVolume *scoringPerVolume, SOAData const soaData)
+__global__ __launch_bounds__(ThreadsPerBlock, MinBlocksPerSM) void BremsstrahlungPos(
+    Track *particles, const adept::MParray *active, Secondaries secondaries, adept::MParray *activeQueue,
+    GlobalScoring *globalScoring, ScoringPerVolume *scoringPerVolume, SOAData const soaData)
 {
   InteractionLoop<1>(&ElectronInteraction<false, 1>, active, soaData, particles, secondaries, activeQueue,
                      globalScoring, scoringPerVolume);
 }
-__global__ void AnnihilationPos(Track *particles, const adept::MParray *active, Secondaries secondaries,
-                                adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                                ScoringPerVolume *scoringPerVolume, SOAData const soaData)
+__global__ __launch_bounds__(ThreadsPerBlock, MinBlocksPerSM) void AnnihilationPos(
+    Track *particles, const adept::MParray *active, Secondaries secondaries, adept::MParray *activeQueue,
+    GlobalScoring *globalScoring, ScoringPerVolume *scoringPerVolume, SOAData const soaData)
 {
   InteractionLoop<2>(&ElectronInteraction<false, 2>, active, soaData, particles, secondaries, activeQueue,
                      globalScoring, scoringPerVolume);

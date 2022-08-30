@@ -19,9 +19,9 @@
 #include <G4HepEmGammaInteractionConversion.icc>
 #include <G4HepEmGammaInteractionPhotoelectric.icc>
 
-__global__ void TransportGammas(Track *gammas, const adept::MParray *active, Secondaries secondaries,
-                                adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                                ScoringPerVolume *scoringPerVolume, SOAData const soaData)
+__global__ __launch_bounds__(ThreadsPerBlock, MinBlocksPerSM) void TransportGammas(
+    Track *gammas, const adept::MParray *active, Secondaries secondaries, adept::MParray *activeQueue,
+    GlobalScoring *globalScoring, ScoringPerVolume *scoringPerVolume, SOAData const soaData)
 {
 #ifdef VECGEOM_FLOAT_PRECISION
   const Precision kPush = 10 * vecgeom::kTolerance;
@@ -238,23 +238,23 @@ __device__ void GammaInteraction(int const globalSlot, SOAData const &soaData, i
   }
 }
 
-__global__ void PairCreation(Track *particles, const adept::MParray *active, Secondaries secondaries,
-                             adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                             ScoringPerVolume *scoringPerVolume, SOAData const soaData)
+__global__ __launch_bounds__(ThreadsPerBlock, MinBlocksPerSM) void PairCreation(
+    Track *particles, const adept::MParray *active, Secondaries secondaries, adept::MParray *activeQueue,
+    GlobalScoring *globalScoring, ScoringPerVolume *scoringPerVolume, SOAData const soaData)
 {
   InteractionLoop<0>(&GammaInteraction<0>, active, soaData, particles, secondaries, activeQueue, globalScoring,
                      scoringPerVolume);
 }
-__global__ void ComptonScattering(Track *particles, const adept::MParray *active, Secondaries secondaries,
-                                  adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                                  ScoringPerVolume *scoringPerVolume, SOAData const soaData)
+__global__ __launch_bounds__(ThreadsPerBlock, MinBlocksPerSM) void ComptonScattering(
+    Track *particles, const adept::MParray *active, Secondaries secondaries, adept::MParray *activeQueue,
+    GlobalScoring *globalScoring, ScoringPerVolume *scoringPerVolume, SOAData const soaData)
 {
   InteractionLoop<1>(&GammaInteraction<1>, active, soaData, particles, secondaries, activeQueue, globalScoring,
                      scoringPerVolume);
 }
-__global__ void PhotoelectricEffect(Track *particles, const adept::MParray *active, Secondaries secondaries,
-                                    adept::MParray *activeQueue, GlobalScoring *globalScoring,
-                                    ScoringPerVolume *scoringPerVolume, SOAData const soaData)
+__global__ __launch_bounds__(ThreadsPerBlock, MinBlocksPerSM) void PhotoelectricEffect(
+    Track *particles, const adept::MParray *active, Secondaries secondaries, adept::MParray *activeQueue,
+    GlobalScoring *globalScoring, ScoringPerVolume *scoringPerVolume, SOAData const soaData)
 {
   InteractionLoop<2>(&GammaInteraction<2>, active, soaData, particles, secondaries, activeQueue, globalScoring,
                      scoringPerVolume);
