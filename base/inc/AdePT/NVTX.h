@@ -15,6 +15,7 @@
 
 #include <numeric>
 #include <array>
+#include <atomic>
 #include <cstdint>
 #include <string>
 
@@ -68,7 +69,7 @@ public:
 
   static uint32_t nextColour()
   {
-    static int colour = 0;
+    static std::atomic_int colour = 0;
     auto idx          = colour++ % _colours.size();
     return _colours[idx];
   }
