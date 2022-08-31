@@ -34,10 +34,23 @@
 #include <AdePT/ArgParser.h>
 #include <AdePT/NVTX.h>
 
+#include <future>
+#include <mutex>
+
 static constexpr double DefaultCut = 0.7 * mm;
+std::mutex g_xmlMutex;
 
 const G4VPhysicalVolume *InitGeant4(const std::string &gdml_file)
 {
+  // Read the geometry, regions and cuts from the GDML file
+  G4VPhysicalVolume *world = nullptr;
+  {
+    std::scoped_lock lock{g_xmlMutex};
+    G4GDMLParser parser;
+    parser.Read(gdml_file, false); // turn off schema checker
+    world = parser.GetWorldVolume();
+  }
+
   auto defaultRegion = new G4Region("DefaultRegionForTheWorld"); // deleted by store
   auto pcuts         = G4ProductionCutsTable::GetProductionCutsTable()->GetDefaultProductionCuts();
   pcuts->SetProductionCut(DefaultCut, "gamma");
@@ -45,12 +58,6 @@ const G4VPhysicalVolume *InitGeant4(const std::string &gdml_file)
   pcuts->SetProductionCut(DefaultCut, "e+");
   pcuts->SetProductionCut(DefaultCut, "proton");
   defaultRegion->SetProductionCuts(pcuts);
-
-  // Read the geometry, regions and cuts from the GDML file
-  std::cout << "reading " << gdml_file << " transiently on CPU for Geant4 ...\n";
-  G4GDMLParser parser;
-  parser.Read(gdml_file, false); // turn off schema checker
-  G4VPhysicalVolume *world = parser.GetWorldVolume();
 
   if (world == nullptr) {
     std::cerr << "example18: World volume not set properly check your setup selection criteria or GDML input!\n";
@@ -96,8 +103,12 @@ const vecgeom::cxx::VPlacedVolume *InitVecGeom(const std::string &gdml_file, int
 {
   // Import the gdml file into VecGeom
   vecgeom::GeoManager::Instance().SetTransformationCacheDepth(cache_depth);
-  vgdml::Parser vgdmlParser;
-  auto middleWare = vgdmlParser.Load(gdml_file.c_str(), false, copcore::units::mm);
+  std::unique_ptr<vgdml::Middleware> middleWare;
+  {
+    std::scoped_lock lock{g_xmlMutex};
+    vgdml::Parser vgdmlParser;
+    middleWare = vgdmlParser.Load(gdml_file.c_str(), false, copcore::units::mm);
+  }
   if (middleWare == nullptr) {
     std::cerr << "Failed to read geometry from GDML file '" << gdml_file << "'" << std::endl;
     return nullptr;
@@ -197,6 +208,7 @@ int main(int argc, char *argv[])
   OPTION_STRING(gunpos, "0,0,0");
   OPTION_STRING(gundir, "1,0,0");
   OPTION_BOOL(rotatingParticleGun, false);
+  OPTION_BOOL(async_init, true);
 
   // parse gun config
   GunConfig gunConfig{};
@@ -207,17 +219,28 @@ int main(int argc, char *argv[])
   vecgeom::Stopwatch timer;
   timer.Start();
 
+  // Initialize VecGeom
+  std::cout << "reading " << gdml_file << " transiently on CPU for VecGeom and sync to GPU\n";
+  auto vecGeomFuture = std::async(async_init ? std::launch::async : std::launch::deferred, [gdml_file, cache_depth]() {
+    NVTXTracer trace("InitVecGeom");
+    auto world = InitVecGeom(gdml_file, cache_depth);
+
+    trace.setTag("SyncGeom");
+    auto &cudaManager = vecgeom::cxx::CudaManager::Instance();
+    cudaManager.LoadGeometry(world);
+    cudaManager.Synchronize();
+
+    trace.setTag("InitBVH");
+    InitBVH();
+
+    return world;
+  });
+
   NVTXTracer tracer("InitG4");
 
   // Initialize Geant4
   auto g4world = InitGeant4(gdml_file);
   if (!g4world) return 3;
-
-  tracer.setTag("InitVecGeom");
-  // Initialize VecGeom
-  std::cout << "reading " << gdml_file << " transiently on CPU for VecGeom ...\n";
-  auto world = InitVecGeom(gdml_file, cache_depth);
-  if (!world) return 3;
 
   // Construct and initialize the G4HepEmState data/tables
   tracer.setTag("InitG4HepEM");
@@ -231,22 +254,15 @@ int main(int argc, char *argv[])
   std::cout << "initializing material-cut couple indices ...\n";
   int *MCCindex = nullptr;
 
+  const vecgeom::cxx::VPlacedVolume *world = vecGeomFuture.get();
+  if (!world) return 3;
+
   try {
     MCCindex = CreateMCCindex(g4world, world, hepEmState);
   } catch (const std::runtime_error &ex) {
     std::cerr << "*** CreateMCCindex: " << ex.what() << "\n";
     return 1;
   }
-
-  // Load and synchronize the geometry on the GPU
-  tracer.setTag("SyncGeom");
-  std::cout << "synchronizing VecGeom geometry to GPU ...\n";
-  auto &cudaManager = vecgeom::cxx::CudaManager::Instance();
-  cudaManager.LoadGeometry(world);
-  cudaManager.Synchronize();
-
-  tracer.setTag("InitBVH");
-  InitBVH();
 
   auto time_cpu = timer.Stop();
   std::cout << "Initialization took: " << time_cpu << " sec\n";

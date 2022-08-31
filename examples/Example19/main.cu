@@ -162,7 +162,7 @@ void runGPU(int numParticles, double energy, int batch, const int *MCIndex_host,
             ScoringPerVolume *scoringPerVolume_host, GlobalScoring *globalScoring_host, int numVolumes, int numPlaced,
             G4HepEmState *state, GunConfig gunConfig)
 {
-  NVTXTracer tracer("InitG4HepEM");
+  NVTXTracer tracer("InitG4HepEMGPU");
   InitG4HepEmGPU(state);
 
   tracer.setTag("InitParticles/malloc/copy");
