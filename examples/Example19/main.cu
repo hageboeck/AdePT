@@ -429,8 +429,6 @@ void runGPU(int numParticles, double energy, int batch, const int *MCIndex_host,
 
       tracer.setOccupancy(inFlight);
 
-      tracer.setOccupancy(inFlight);
-
       // Swap the queues for the next iteration.
       electrons.queues.SwapActive();
       positrons.queues.SwapActive();
