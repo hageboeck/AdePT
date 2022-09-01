@@ -318,6 +318,42 @@ void runGPU(int numParticles, double energy, int batch, const int *MCIndex_host,
           .gammas    = {gammas.tracks, gammas.slotManager, gammas.queues.nextActive},
       };
 
+      // *** GAMMAS ***
+      int numGammas = stats->inFlight[ParticleType::Gamma];
+      if (numGammas > 0) {
+        transportBlocks = (numGammas + ThreadsPerBlock - 1) / ThreadsPerBlock;
+        transportBlocks = std::min(transportBlocks, MaxBlocks);
+
+        TransportGammas<<<transportBlocks, ThreadsPerBlock, 0, gammas.stream>>>(
+            gammas.tracks, gammas.queues.currentlyActive, secondaries, gammas.queues.nextActive, globalScoring,
+            scoringPerVolume, gammas.soaData);
+
+        COPCORE_CUDA_CHECK(cudaEventRecord(gammas.event, gammas.stream));
+        COPCORE_CUDA_CHECK(cudaStreamWaitEvent(stream, gammas.event, 0));
+
+        for (auto i = 0; i < 3; ++i) {
+          COPCORE_CUDA_CHECK(cudaStreamWaitEvent(interactionStreams[i], gammas.event, 0));
+        }
+        // About 2% of all gammas:
+        PairCreation<<<16, ThreadsPerBlock, 0, interactionStreams[0]>>>(
+            gammas.tracks, gammas.queues.currentlyActive, secondaries, gammas.queues.nextActive, globalScoring,
+            scoringPerVolume, gammas.soaData);
+        // About 10% of all gammas:
+        ComptonScattering<<<64, ThreadsPerBlock, 0, interactionStreams[1]>>>(
+            gammas.tracks, gammas.queues.currentlyActive, secondaries, gammas.queues.nextActive, globalScoring,
+            scoringPerVolume, gammas.soaData);
+        // About 15% of all gammas:
+        PhotoelectricEffect<<<64, ThreadsPerBlock, 0, interactionStreams[2]>>>(
+            gammas.tracks, gammas.queues.currentlyActive, secondaries, gammas.queues.nextActive, globalScoring,
+            scoringPerVolume, gammas.soaData);
+        for (auto i = 0; i < 3; ++i) {
+          COPCORE_CUDA_CHECK(cudaEventRecord(positrons.event, interactionStreams[i]));
+          COPCORE_CUDA_CHECK(cudaStreamWaitEvent(stream, positrons.event, 0));
+        }
+        COPCORE_CUDA_CHECK(cudaEventRecord(positrons.event, positrons.stream));
+        COPCORE_CUDA_CHECK(cudaStreamWaitEvent(stream, positrons.event, 0));
+      }
+
       // *** ELECTRONS ***
       int numElectrons = stats->inFlight[ParticleType::Electron];
       if (numElectrons > 0) {
@@ -372,42 +408,6 @@ void runGPU(int numParticles, double energy, int batch, const int *MCIndex_host,
           COPCORE_CUDA_CHECK(cudaEventRecord(positrons.event, streamToWaitFor));
           COPCORE_CUDA_CHECK(cudaStreamWaitEvent(stream, positrons.event, 0));
         }
-      }
-
-      // *** GAMMAS ***
-      int numGammas = stats->inFlight[ParticleType::Gamma];
-      if (numGammas > 0) {
-        transportBlocks = (numGammas + ThreadsPerBlock - 1) / ThreadsPerBlock;
-        transportBlocks = std::min(transportBlocks, MaxBlocks);
-
-        TransportGammas<<<transportBlocks, ThreadsPerBlock, 0, gammas.stream>>>(
-            gammas.tracks, gammas.queues.currentlyActive, secondaries, gammas.queues.nextActive, globalScoring,
-            scoringPerVolume, gammas.soaData);
-
-        COPCORE_CUDA_CHECK(cudaEventRecord(gammas.event, gammas.stream));
-        COPCORE_CUDA_CHECK(cudaStreamWaitEvent(stream, gammas.event, 0));
-
-        for (auto i = 0; i < 3; ++i) {
-          COPCORE_CUDA_CHECK(cudaStreamWaitEvent(interactionStreams[i], gammas.event, 0));
-        }
-        // About 2% of all gammas:
-        PairCreation<<<16, ThreadsPerBlock, 0, interactionStreams[0]>>>(
-            gammas.tracks, gammas.queues.currentlyActive, secondaries, gammas.queues.nextActive, globalScoring,
-            scoringPerVolume, gammas.soaData);
-        // About 10% of all gammas:
-        ComptonScattering<<<64, ThreadsPerBlock, 0, interactionStreams[1]>>>(
-            gammas.tracks, gammas.queues.currentlyActive, secondaries, gammas.queues.nextActive, globalScoring,
-            scoringPerVolume, gammas.soaData);
-        // About 15% of all gammas:
-        PhotoelectricEffect<<<64, ThreadsPerBlock, 0, interactionStreams[2]>>>(
-            gammas.tracks, gammas.queues.currentlyActive, secondaries, gammas.queues.nextActive, globalScoring,
-            scoringPerVolume, gammas.soaData);
-        for (auto i = 0; i < 3; ++i) {
-          COPCORE_CUDA_CHECK(cudaEventRecord(positrons.event, interactionStreams[i]));
-          COPCORE_CUDA_CHECK(cudaStreamWaitEvent(stream, positrons.event, 0));
-        }
-        COPCORE_CUDA_CHECK(cudaEventRecord(positrons.event, positrons.stream));
-        COPCORE_CUDA_CHECK(cudaStreamWaitEvent(stream, positrons.event, 0));
       }
 
       // *** END OF TRANSPORT ***
