@@ -24,7 +24,7 @@ class NVTXTracer {
                                                        0xff00ffff, 0xffff0000, 0xffffffff};
   std::string _name;
   nvtxRangeId_t _id;
-  std::array<unsigned long, 10> _lastOccups{};
+  std::array<unsigned long, 20> _lastOccups{};
   decltype(_lastOccups)::iterator _occupIt = _lastOccups.begin();
 
 public:
@@ -51,16 +51,18 @@ public:
   void setOccupancy(unsigned long occupancy)
   {
     // Require the occupancy to be larger than the majority of previous iterations to call it rising
-    const bool rising = 2 * std::count_if(_lastOccups.begin(), _lastOccups.end(),
-                                          [occupancy](auto elm) { return occupancy > elm + 1; }) >
-                        _lastOccups.size();
+    const bool rising =
+        2 * std::count_if(_lastOccups.begin(), _lastOccups.end(), [occupancy](auto elm) { return occupancy > elm + 1; }) >
+        _lastOccups.size();
+    const bool falling = 2 * std::count_if(_lastOccups.begin(), _lastOccups.end(), [occupancy](auto elm) { return occupancy < elm - 1; }) >
+        _lastOccups.size();
 
     if (rising) {
       setTag("occupancy rising");
-    } else if (_name == "occupancy rising") {
-      setTag("peak occupancy (" + std::to_string(occupancy) + " in-flight)");
-    } else {
-      setTag("occupancy falling");
+    }
+    if (falling) {
+      if (_name == "occupancy rising") setTag("peak occupancy (" + std::to_string(occupancy) + " in-flight)");
+      else setTag("occupancy falling");
     }
 
     *_occupIt = occupancy;
