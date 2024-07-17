@@ -15,7 +15,6 @@ class AdePTConfiguration {
 public:
   AdePTConfiguration();
   ~AdePTConfiguration();
-  void SetRandomSeed(int randomSeed) { fRandomSeed = randomSeed; }
   void SetTrackInAllRegions(bool trackInAllRegions) { fTrackInAllRegions = trackInAllRegions; }
   void AddGPURegionName(std::string name) { fGPURegionNames.push_back(name); }
   void SetAdePTActivation(bool activateAdePT) { fAdePTActivated = activateAdePT; }
@@ -43,7 +42,6 @@ public:
   std::string GetVecGeomGDML() { return fVecGeomGDML; }
 
 private:
-  int fRandomSeed;
   bool fTrackInAllRegions{false};
   std::vector<std::string> fGPURegionNames{};
   bool fAdePTActivated{true};

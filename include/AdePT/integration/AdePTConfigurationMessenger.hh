@@ -33,7 +33,6 @@ private:
   AdePTConfiguration *fAdePTConfiguration;
 
   G4UIdirectory *fDir;
-  G4UIcmdWithAnInteger *fSetSeedCmd;
   G4UIcmdWithABool *fSetTrackInAllRegionsCmd;
   G4UIcmdWithAString *fAddRegionCmd;
   G4UIcmdWithABool *fActivateAdePTCmd;
