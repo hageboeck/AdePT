@@ -54,6 +54,8 @@ struct Track {
 
     // The global time is inherited from the parent
     this->globalTime = gTime;
+    this->localTime  = 0.;
+    this->properTime = 0.;
   }
 
   __host__ __device__ void CopyTo(adeptint::TrackData &tdata, int pdg)
